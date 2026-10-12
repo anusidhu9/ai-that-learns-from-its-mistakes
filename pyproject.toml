@@ -1,3 +1,4 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["slow: trains a full agent (~1 min on CPU); skip with -m 'not slow'"]

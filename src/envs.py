@@ -454,10 +454,11 @@ class GridWorld:
 
 PRESETS: Dict[str, dict] = {
     "maze": dict(layout="maze", height=9, width=9, loop_prob=0.1),
-    "maze_hazards": dict(layout="maze", height=9, width=9, loop_prob=0.3, n_hazards=4),
+    "maze_hazards": dict(layout="maze", height=9, width=9, loop_prob=0.3, n_hazards=4,
+                         hazard_terminal=False),
     "open": dict(layout="open", height=8, width=8, wall_density=0.1, random_start_goal=True),
     "open_hazards": dict(layout="open", height=8, width=8, wall_density=0.1,
-                         random_start_goal=True, n_hazards=5),
+                         random_start_goal=True, n_hazards=5, hazard_terminal=False),
 }
 
 

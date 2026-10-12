@@ -14,10 +14,15 @@ state still has future value, so we keep bootstrapping from it.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from typing import Dict, Optional
+from dataclasses import asdict, dataclass, field
+from typing import Dict, Optional, Tuple
 
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from src.replay import PrioritizedReplayBuffer, ReplayBuffer
 
 
 @dataclass
@@ -163,3 +168,199 @@ class TabularQAgent:
         self.episodes = int(state["episodes"])
         self.updates = int(state["updates"])
         self.q = {k: np.array(v, dtype=np.float64) for k, v in state["q"].items()}
+
+
+@dataclass
+class DQNConfig:
+    """Hyperparameters for DQNAgent (defaults tuned for 5x5..11x11 grids on CPU)."""
+
+    hidden: Tuple[int, ...] = (128, 128)
+    lr: float = 1e-3
+    gamma: float = 0.99
+    batch_size: int = 64
+    buffer_size: int = 20_000
+    learning_starts: int = 500      # env steps collected before the first update
+    train_freq: int = 2             # gradient step every N env steps
+    target_update: int = 100        # copy online -> target every N gradient steps
+    double: bool = True             # Double DQN target (van Hasselt et al., 2016)
+    prioritized: bool = False       # prioritized experience replay
+    per_alpha: float = 0.6
+    per_beta_start: float = 0.4
+    per_beta_steps: int = 20_000    # gradient steps to anneal beta to 1
+    grad_clip: float = 10.0
+    epsilon: EpsilonSchedule = field(default_factory=EpsilonSchedule)
+
+
+class QNetwork(nn.Module):
+    """MLP mapping an observation vector to one Q-value per action."""
+
+    def __init__(self, obs_size: int, n_actions: int, hidden: Tuple[int, ...] = (128, 128)):
+        super().__init__()
+        layers, size = [], obs_size
+        for width in hidden:
+            layers += [nn.Linear(size, width), nn.ReLU()]
+            size = width
+        layers.append(nn.Linear(size, n_actions))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+class DQNAgent:
+    """Deep Q-Network (Mnih et al., 2015) with optional Double DQN and PER.
+
+    A neural network Q(s, a; theta) replaces the table. Each gradient step
+    samples a batch from the replay buffer and minimises
+
+        L(theta) = mean_i  w_i * Huber( y_i - Q(s_i, a_i; theta) )
+
+        y_i = r_i                                         if s'_i is terminal
+        y_i = r_i + gamma * Q(s'_i, a*; theta_target)     otherwise
+        a*  = argmax_a Q(s'_i, a; theta)         (Double DQN)
+            = argmax_a Q(s'_i, a; theta_target)  (standard DQN)
+
+    theta_target is a periodically copied snapshot of theta, which keeps the
+    regression target stable. w_i are importance weights (all 1 without PER).
+    """
+
+    def __init__(self, obs_size: int, n_actions: int, config: Optional[DQNConfig] = None,
+                 seed: Optional[int] = None):
+        self.obs_size = obs_size
+        self.n_actions = n_actions
+        self.config = config if config is not None else DQNConfig()
+        self.name = "dqn_per" if self.config.prioritized else "dqn"
+        self.rng = np.random.default_rng(seed)
+        if seed is not None:
+            torch.manual_seed(seed)
+
+        cfg = self.config
+        self.online = QNetwork(obs_size, n_actions, cfg.hidden)
+        self.target = QNetwork(obs_size, n_actions, cfg.hidden)
+        self.target.load_state_dict(self.online.state_dict())
+        self.target.eval()
+        self.optimizer = torch.optim.Adam(self.online.parameters(), lr=cfg.lr)
+        if cfg.prioritized:
+            self.buffer = PrioritizedReplayBuffer(cfg.buffer_size, obs_size,
+                                                  alpha=cfg.per_alpha, seed=seed)
+        else:
+            self.buffer = ReplayBuffer(cfg.buffer_size, obs_size, seed=seed)
+
+        self.episodes = 0
+        self.env_steps = 0
+        self.updates = 0
+
+    @property
+    def epsilon(self) -> float:
+        return self.config.epsilon.value(self.episodes)
+
+    @property
+    def beta(self) -> float:
+        cfg = self.config
+        frac = min(1.0, self.updates / max(1, cfg.per_beta_steps))
+        return cfg.per_beta_start + (1.0 - cfg.per_beta_start) * frac
+
+    @torch.no_grad()
+    def q_values(self, obs: np.ndarray) -> np.ndarray:
+        x = torch.as_tensor(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
+        return self.online(x).squeeze(0).numpy().astype(np.float64)
+
+    def act(self, obs: np.ndarray, greedy: bool = False) -> int:
+        if not greedy and self.rng.random() < self.epsilon:
+            return int(self.rng.integers(self.n_actions))
+        return greedy_action(self.q_values(obs), self.rng)
+
+    def update(self, obs, action, reward, next_obs, terminated, truncated) -> Optional[dict]:
+        """Store the transition and, when due, take one gradient step."""
+        self.buffer.add(obs, action, reward, next_obs, terminated)
+        self.env_steps += 1
+        cfg = self.config
+        if len(self.buffer) < cfg.learning_starts or self.env_steps % cfg.train_freq != 0:
+            return None
+        return self._learn()
+
+    def _learn(self) -> dict:
+        cfg = self.config
+        batch = self.buffer.sample(cfg.batch_size, beta=self.beta)
+        obs = torch.as_tensor(batch["obs"])
+        actions = torch.as_tensor(batch["actions"])
+        rewards = torch.as_tensor(batch["rewards"])
+        next_obs = torch.as_tensor(batch["next_obs"])
+        terminated = torch.as_tensor(batch["terminated"])
+        weights = torch.as_tensor(batch["weights"])
+
+        q = self.online(obs).gather(1, actions.unsqueeze(1)).squeeze(1)
+        with torch.no_grad():
+            next_target = self.target(next_obs)
+            if cfg.double:
+                best = self.online(next_obs).argmax(dim=1, keepdim=True)
+                next_q = next_target.gather(1, best).squeeze(1)
+            else:
+                next_q = next_target.max(dim=1).values
+            y = rewards + cfg.gamma * (1.0 - terminated) * next_q
+
+        td = (y - q).detach().numpy()
+        loss = (weights * F.smooth_l1_loss(q, y, reduction="none")).mean()
+        self.optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm_(self.online.parameters(), cfg.grad_clip)
+        self.optimizer.step()
+
+        self.buffer.update_priorities(batch["indices"], td)
+        self.updates += 1
+        if self.updates % cfg.target_update == 0:
+            self.target.load_state_dict(self.online.state_dict())
+        return {"loss": float(loss.item()), "td_error": float(np.abs(td).mean())}
+
+    def end_episode(self) -> None:
+        self.episodes += 1
+
+    def state_dict(self, include_buffer: bool = False) -> dict:
+        state = {
+            "name": self.name,
+            "obs_size": self.obs_size,
+            "n_actions": self.n_actions,
+            "config": asdict(self.config),
+            "online": self.online.state_dict(),
+            "target": self.target.state_dict(),
+            "optimizer": self.optimizer.state_dict(),
+            "episodes": self.episodes,
+            "env_steps": self.env_steps,
+            "updates": self.updates,
+        }
+        if include_buffer:
+            state["buffer"] = self.buffer.state_dict()
+        return state
+
+    def load_state_dict(self, state: dict) -> None:
+        if state["obs_size"] != self.obs_size or state["n_actions"] != self.n_actions:
+            raise ValueError("checkpoint has a different observation or action size")
+        cfg = dict(state["config"])
+        cfg["hidden"] = tuple(cfg["hidden"])
+        cfg["epsilon"] = EpsilonSchedule(**cfg["epsilon"])
+        if cfg["hidden"] != tuple(self.config.hidden) or cfg["prioritized"] != self.config.prioritized:
+            raise ValueError("checkpoint network size or replay type differs from this agent")
+        self.config = DQNConfig(**cfg)
+        self.online.load_state_dict(state["online"])
+        self.target.load_state_dict(state["target"])
+        self.optimizer.load_state_dict(state["optimizer"])
+        self.episodes = int(state["episodes"])
+        self.env_steps = int(state["env_steps"])
+        self.updates = int(state["updates"])
+        if "buffer" in state:
+            self.buffer.load_state_dict(state["buffer"])
+
+
+def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = None, **kwargs):
+    """Build an agent by name: 'random', 'tabular_q', 'dqn', or 'dqn_per'.
+
+    kwargs go to TabularQAgent, or become DQNConfig fields for the DQN variants.
+    """
+    if name == "random":
+        return RandomAgent(n_actions, seed=seed)
+    if name == "tabular_q":
+        return TabularQAgent(n_actions, seed=seed, **kwargs)
+    if name in ("dqn", "dqn_per"):
+        kwargs["prioritized"] = name == "dqn_per"
+        return DQNAgent(obs_size, n_actions, DQNConfig(**kwargs), seed=seed)
+    raise ValueError(f"unknown agent {name!r}; choose random, tabular_q, dqn or dqn_per")
