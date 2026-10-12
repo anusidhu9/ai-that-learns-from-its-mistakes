@@ -26,7 +26,7 @@ def small_env(**overrides):
     dict(layout="cave"),
     dict(obs_mode="pixels"),
     dict(layout="maze", height=8),
-    dict(height=3, width=3, layout="open"),
+    dict(height=2, width=5, layout="open"),
     dict(layout_pool=()),
 ])
 def test_invalid_config_rejected(kwargs):

@@ -76,8 +76,8 @@ class EnvConfig:
             raise ValueError(f"layout must be one of {LAYOUTS}, got {self.layout!r}")
         if self.obs_mode not in OBS_MODES:
             raise ValueError(f"obs_mode must be one of {OBS_MODES}, got {self.obs_mode!r}")
-        if self.height < 5 or self.width < 5:
-            raise ValueError("height and width must be at least 5")
+        if self.height < 3 or self.width < 3:
+            raise ValueError("height and width must be at least 3")
         if self.layout == "maze" and (self.height % 2 == 0 or self.width % 2 == 0):
             raise ValueError("maze layouts need odd height and width")
         if not 0.0 <= self.loop_prob <= 1.0 or not 0.0 <= self.wall_density < 1.0:
