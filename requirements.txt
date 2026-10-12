@@ -1,0 +1,8 @@
+# Stage 1 needs only numpy + pytest. The rest are added in later stages
+# (all are preinstalled on Google Colab except possibly gradio).
+numpy>=1.24
+pytest>=7.0
+torch>=2.0
+matplotlib>=3.7
+pandas>=2.0
+gradio>=4.0
