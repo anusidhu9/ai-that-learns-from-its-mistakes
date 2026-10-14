@@ -14,6 +14,7 @@ import hashlib
 from typing import Dict, List, Optional, Sequence
 
 from src.agents import DQN_NICKNAMES, RandomAgent, TabularQAgent
+from src.evaluation import format_p
 from src.training import mistake_hotspots
 
 # Nicknames live on the agent classes (Stages 2-3); collected here for display.
@@ -223,8 +224,8 @@ def verdict(p_value: float, difference: float, a: str, b: str, metric: str = "su
         a_higher = difference > 0
         a_better = a_higher != (metric in LOWER_IS_BETTER)
         winner, loser = (na, nb) if a_better else (nb, na)
-        return f"{winner} beats {loser} on {metric} (p = {p_value:.3f}). Not a fluke."
+        return f"{winner} beats {loser} on {metric} ({format_p(p_value)}). Not a fluke."
     if difference == 0:
         return f"{na} and {nb} tied on {metric}. Shake hands."
-    return (f"{na} vs {nb} on {metric}: difference {difference:+.2f}, p = {p_value:.3f}. "
+    return (f"{na} vs {nb} on {metric}: difference {difference:+.2f}, {format_p(p_value)}. "
             f"The jury is still out; more seeds needed before anyone gloats.")

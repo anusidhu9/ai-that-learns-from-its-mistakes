@@ -9,7 +9,7 @@
 
 Reinforcement-learning agents explore grid worlds, get **rewarded** for reaching the goal and **penalised** for mistakes (hitting walls, stepping on hazards, revisiting cells, running out of time), and are then tested to see whether they actually got better. Everything runs on a free CPU: Google Colab or a laptop.
 
-The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN) and DQN with prioritized experience replay across five experiments, 3–5 seeds each, with greedy evaluation, 95% confidence intervals and permutation tests. It includes an interactive **Gradio dashboard** and a mildly sarcastic commentator.
+The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN) and DQN with prioritized experience replay across five experiments, 3–10 seeds each, with greedy evaluation, 95% confidence intervals and permutation tests. It includes an interactive **Gradio dashboard** and a mildly sarcastic commentator.
 
 ![Mistakes at each cell early vs late in training](docs/figures/mistake_heatmap.png)
 
@@ -22,7 +22,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 | Experiment | Random | Tabular Q | DQN | DQN + PER |
 |---|---|---|---|---|
 | `fixed_maze`: one 9×9 maze, 5 seeds | 0.06 ± 0.07 | **1.00** ± 0.00 | **1.00** ± 0.00 | 0.80 ± 0.56 |
-| `hazard_maze`: 4 hazards (−0.5 each) | 0.12 ± 0.06 | **1.00** ± 0.00 | **1.00** ± 0.00 | **1.00** ± 0.00 |
+| `hazard_maze`: 4 hazards (−0.5 each), 10 seeds | 0.15 ± 0.05 | **1.00** ± 0.00 | 0.90 ± 0.23 | **1.00** ± 0.00 |
 | `terminal_hazards`: a hazard ends the episode | 0.00 ± 0.00 | **1.00** ± 0.00 | 0.20 ± 0.56 | — |
 | `open_hazards`: 8×8 open grid, 5 hazards | 0.40 ± 0.23 | **1.00** ± 0.00 | **1.00** ± 0.00 | **1.00** ± 0.00 |
 | `generalization`: **unseen** mazes, 3 seeds | 0.07 ± 0.03 | 0.29 ± 0.06 | 0.45 ± 0.15 | — |
@@ -30,13 +30,14 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 *Success rate (fraction of greedy episodes that reach the goal).*
 
 **What the evidence supports**
-- **The agents learn from their mistakes.** Tabular Q-learning and DQN beat random on every fixed layout (permutation test p = 0.008, the smallest possible with 5 seeds per agent). On `fixed_maze` and `open_hazards` both take the shortest path with zero mistakes in every seed; on `hazard_maze` both always reach the goal, though sometimes through a hazard (below).
+- **The agents learn from their mistakes.** Tabular Q-learning and DQN beat random on every fixed layout (permutation tests: p = 0.008, the smallest possible with 5 seeds per agent; p < 0.001 on `hazard_maze` with 10). On `fixed_maze` and `open_hazards` both take the shortest path with zero mistakes in every seed.
 - **Mistake counts alone can lie.** When hazards end the episode, DQN learned to walk into one in 4 of 5 seeds: dying quickly (−0.51) was cheaper than wandering for 100 steps (about −3.6). Its mistake count looked better than random's while its success rate was 0.20 (vs 1.00 for tabular Q, p = 0.048).
+- **DQN learns to avoid hazards that tabular Q-learning walks through.** On `hazard_maze` the safe route is 18 steps and a 12-step route crosses one hazard (−0.5, a worse total reward). Tabular Q took the hazard shortcut in 9 of 10 seeds, DQN in 1 of 10 (p = 0.002) and DQN + PER in 3 of 10 (p = 0.02 against tabular Q).
+- **But DQN is less reliable.** One of DQN's 10 hazard-maze runs solved the maze from episode 150 to 350, then unlearned it and ended the run walking into a wall, and one DQN + PER run on `fixed_maze` never solved its maze at all. Tabular Q reached the goal in all 25 of its fixed-layout runs.
 - **Prioritized replay did not help** on these small tasks.
 
 **What it does not (yet) support**
 - On unseen mazes DQN was ahead of tabular Q on every seed (0.40–0.52 vs 0.26–0.30), but with 3 seeds the smallest possible p-value is 0.10. More seeds are needed before claiming it generalizes better.
-- On the hazard maze, tabular Q took a route through a hazard in 4/5 seeds and DQN in 1/5; p = 0.21, so this is not established either.
 
 | Learning to avoid mistakes (fixed maze) | When fewer mistakes is not better (terminal hazards) |
 |---|---|
@@ -138,7 +139,7 @@ src/
   visualization.py  every chart, episode replays, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              150 tests (pytest); `-m "not slow"` skips one long training test
+tests/              154 tests (pytest); `-m "not slow"` skips one long training test
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report
 MIND_Colab.ipynb    end-to-end notebook
@@ -152,7 +153,7 @@ LICENSE             MIT License
 ## Limitations
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
-- 3–5 seeds per experiment: enough to show large differences, not small ones.
+- 3–10 seeds per experiment: enough to show large differences, not small ones.
 - One set of hyperparameters per algorithm, tuned on the fixed maze only.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 

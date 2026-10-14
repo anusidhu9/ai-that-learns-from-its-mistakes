@@ -2,6 +2,12 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## hazard_maze with 10 seeds
+
+- `hazard_maze` now uses 10 seeds (was 5). The hazard-shortcut difference that was not established with 5 seeds (p = 0.21) is established with 10: tabular Q-learning crossed a hazard in 9 of 10 runs, DQN in 1 (p = 0.002). One DQN run solved the maze and then unlearned it, so DQN's success is 0.90. Seeds 0–4 were retrained and reproduced the earlier results exactly. `results/hazard_maze`, the README, REPORT (Sections 1, 5, 6.2, 7–11), notebook section 11 and the hazard figure are updated.
+- `python -m src.evaluation --seeds N` now means seeds 0..N-1, so it can extend an experiment beyond its defined seeds (before, it could only shrink it).
+- Very small p-values are shown as "p < 0.001" in the dashboard, verdicts and command line, instead of rounding to an impossible "0.000".
+
 ## Documentation and chart fixes
 
 **Added**

@@ -160,3 +160,19 @@ def test_each_seed_gets_its_own_evaluation_randomness(tmp_path):
     out = run_experiment(exp, tmp_path, log=quiet)
     steps = [r["steps"] for r in out["results"]]
     assert len(set(steps)) > 1, "random baseline must not replay identical moves per seed"
+
+
+def test_cli_seeds_option_can_extend_beyond_defined_seeds(tmp_path, capsys):
+    from src.evaluation import main
+    main(["--experiment", "fixed_maze", "--seeds", "1", "--agents", "random",
+          "--root", str(tmp_path)])
+    assert (tmp_path / "fixed_maze" / "random_s0").exists()
+    exp = json.loads((tmp_path / "fixed_maze" / "experiment.json").read_text())
+    assert exp["seeds"] == [0]
+
+
+def test_format_p_never_shows_zero():
+    from src.evaluation import format_p
+    assert format_p(0.00015) == "p < 0.001"
+    assert format_p(0.008) == "p = 0.008"
+    assert format_p(1.0) == "p = 1.000"

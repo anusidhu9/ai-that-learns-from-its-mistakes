@@ -26,7 +26,8 @@ import pandas as pd
 
 from src import fun
 from src.envs import PRESETS, RewardConfig
-from src.evaluation import (EXPERIMENTS, compare_agents, evaluate_agent, load_experiment)
+from src.evaluation import (EXPERIMENTS, compare_agents, evaluate_agent, format_p,
+                            load_experiment)
 from src.training import (TrainConfig, Trainer, build_env, compare_phases, load_agent)
 from src.visualization import (AGENT_COLORS, AGENT_LABELS, experiment_bars_figure,
                                experiment_curves_figure, frame_figure, learning_curves_figure,
@@ -111,7 +112,7 @@ def _tests_frame(results: List[dict]) -> pd.DataFrame:
             rows.append({"split": split,
                          "comparison": f"{AGENT_LABELS[b]} − {AGENT_LABELS[a]}",
                          "difference": round(c["difference"], 2),
-                         "p-value": round(c["p_value"], 3),
+                         "p-value": format_p(c["p_value"]).removeprefix("p = ").removeprefix("p "),
                          "verdict": fun.verdict(c["p_value"], c["difference"], b, a)})
     return pd.DataFrame(rows)
 

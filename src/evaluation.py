@@ -62,6 +62,11 @@ def mean_ci(values: Sequence[float]) -> Tuple[float, float]:
     return float(x.mean()), float(t * x.std(ddof=1) / math.sqrt(n))
 
 
+def format_p(p_value: float) -> str:
+    """'p = 0.008', or 'p < 0.001' for tiny values (never the impossible 'p = 0.000')."""
+    return "p < 0.001" if p_value < 0.001 else f"p = {p_value:.3f}"
+
+
 def permutation_test(a: Sequence[float], b: Sequence[float],
                      n_resamples: int = 20_000, seed: int = 0) -> float:
     """Two-sided p-value for "a and b have the same mean".
@@ -177,8 +182,8 @@ EXPERIMENTS: Dict[str, Experiment] = {
         "fixed_maze", "maze",
         description="One fixed 9x9 maze: can each agent learn to solve it without mistakes?"),
     "hazard_maze": Experiment(
-        "hazard_maze", "maze_hazards",
-        description="Fixed 9x9 maze with 4 non-terminal hazards (-0.5 each)."),
+        "hazard_maze", "maze_hazards", seeds=tuple(range(10)),
+        description="Fixed 9x9 maze with 4 non-terminal hazards (-0.5 each); 10 seeds."),
     "terminal_hazards": Experiment(
         "terminal_hazards", "maze_hazards", env_overrides={"hazard_terminal": True},
         agents=("random", "tabular_q", "dqn"),
@@ -379,13 +384,14 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--experiment", required=True, choices=sorted(EXPERIMENTS))
     parser.add_argument("--root", default="runs/experiments")
     parser.add_argument("--seeds", type=int, default=None,
-                        help="use only the first N seeds (quicker, wider intervals)")
+                        help="use seeds 0..N-1: fewer is quicker, more gives narrower "
+                             "intervals and smaller attainable p-values")
     parser.add_argument("--agents", nargs="+", default=None, help="subset of agents to run")
     args = parser.parse_args(argv)
 
     exp = EXPERIMENTS[args.experiment]
     if args.seeds is not None:
-        exp = Experiment(**{**asdict(exp), "seeds": tuple(exp.seeds[:args.seeds])})
+        exp = Experiment(**{**asdict(exp), "seeds": tuple(range(args.seeds))})
     if args.agents is not None:
         exp = Experiment(**{**asdict(exp), "agents": tuple(args.agents)})
     out = run_experiment(exp, args.root)
@@ -400,7 +406,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             if len(exp.seeds) < 2:
                 continue
             c = compare_agents(out["results"], b, a, "success", split)
-            print(f"  [{split}] {b} - {a}: {c['difference']:+.2f}  (p = {c['p_value']:.3f})")
+            print(f"  [{split}] {b} - {a}: {c['difference']:+.2f}  ({format_p(c['p_value'])})")
             print(f"           {fun.verdict(c['p_value'], c['difference'], b, a)}")
     print(f"\nFiles written to {out['dir']}")
 
