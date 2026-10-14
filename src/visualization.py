@@ -316,7 +316,9 @@ def experiment_curves_figure(curves: List[dict], metric: str = "success",
 def experiment_bars_figure(summary: List[dict], metric: str = "success") -> Figure:
     """Final greedy result per agent with 95% CI error bars, one panel per split."""
     splits = [s for s in ("train", "unseen") if any(r["split"] == s for r in summary)]
-    fig, axes = _figure(5 * max(1, len(splits)), 3.4, ncols=max(1, len(splits)), sharex=True)
+    # Always 10 inches wide, like the other charts, so a single panel fills
+    # the page instead of sitting in the middle of empty space.
+    fig, axes = _figure(10, 3.4, ncols=max(1, len(splits)), sharex=True)
     if not summary:
         _empty(axes[0, 0], "No results")
         return fig
