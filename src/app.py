@@ -443,8 +443,8 @@ def build_app() -> gr.Blocks:
                                      label="Experiment")
                 metric_dd = gr.Dropdown(METRIC_CHOICES, value="success", label="Metric")
             exp_md = gr.Markdown()
-            bars = gr.Plot(label="Final result per agent")
-            curves = gr.Plot(label="Greedy learning curves")
+            bars = gr.Plot(show_label=False)
+            curves = gr.Plot(show_label=False)
             gr.Markdown("#### Mean ± 95% confidence interval across seeds")
             summary_df = gr.Dataframe(interactive=False, wrap=True)
             gr.Markdown("#### Are the differences real? (permutation tests on success rate)")
@@ -468,11 +468,11 @@ def build_app() -> gr.Blocks:
                     with gr.Row():
                         train_btn = gr.Button("Train", variant="primary")
                         stop_btn = gr.Button("Stop", variant="stop")
-                    preview = gr.Plot(label="Layout")
+                    preview = gr.Plot(show_label=False)
                 with gr.Column(scale=3):
                     status = gr.Markdown("Pick an agent and press **Train**.")
-                    curve_plot = gr.Plot(label="Learning curves")
-                    types_plot = gr.Plot(label="Mistakes by type")
+                    curve_plot = gr.Plot(show_label=False)
+                    types_plot = gr.Plot(show_label=False)
                     with gr.Row():
                         commentary = gr.Textbox(label="Live commentary", lines=14,
                                                 max_lines=14, interactive=False)
@@ -492,8 +492,8 @@ def build_app() -> gr.Blocks:
                                    label="Compare first N vs last N episodes")
                 refresh = gr.Button("Refresh", variant="primary")
             hist_md = gr.Markdown(_need_trainer(new_session()))
-            heat_plot = gr.Plot(label="Where the mistakes happen")
-            reward_plot = gr.Plot(label="Reward breakdown")
+            heat_plot = gr.Plot(show_label=False)
+            reward_plot = gr.Plot(show_label=False)
             with gr.Row():
                 with gr.Column():
                     gr.Markdown("#### Early vs late training")
@@ -519,7 +519,7 @@ def build_app() -> gr.Blocks:
             with gr.Row():
                 record_btn = gr.Button("Record episode", variant="primary")
                 play_btn = gr.Button("▶ Play")
-            frame_plot = gr.Plot(label="Replay")
+            frame_plot = gr.Plot(show_label=False)
             frame_md = gr.Markdown()
             step_slider = gr.Slider(0, 1, value=0, step=1, label="Step")
             record_btn.click(record_replay, [state, layout_mode, unseen_seed],
@@ -536,7 +536,7 @@ def build_app() -> gr.Blocks:
                 race_seed = gr.Number(value=0, precision=0, label="Seed")
                 race_btn = gr.Button("Start race", variant="primary")
             race_md = gr.Markdown()
-            race_plot = gr.Plot(label="Learning curves")
+            race_plot = gr.Plot(show_label=False)
             race_df = gr.Dataframe(interactive=False)
             race_btn.click(race, [race_preset, race_eps, race_seed], [race_md, race_plot, race_df])
 

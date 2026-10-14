@@ -63,7 +63,7 @@ def _style(ax) -> None:
 
 
 def _title(ax, text: str) -> None:
-    ax.set_title(text, loc="left")
+    ax.set_title(text, loc="left", color=INK, fontsize=11, fontweight="bold")
 
 
 def rolling_mean(values: Sequence[float], window: int) -> tuple:
@@ -382,8 +382,9 @@ def frame_figure(env: GridWorld, frames: List[dict], index: int,
     ax_maze, ax_q = fig.subplots(1, 2, gridspec_kw={"width_ratios": [1.15, 1]})
     _style(ax_q)
     events = ", ".join(frame["events"]) or "no event"
+    # Two short lines: one long line can run into the Q-value panel's title.
     draw_grid(ax_maze, env.grid, start=env.start, pos=frame["pos"], path=path, path_color=color,
-              title=f"Step {frame['step']}: {frame['action'] or 'start'} ({events})")
+              title=f"Step {frame['step']}: {frame['action'] or 'start'}\n{events}")
     # Q-values of the state shown are stored with the *next* frame (the step
     # that acted from this state); frame 0 also carries them for the start.
     if index + 1 < len(frames):
@@ -409,7 +410,7 @@ def frame_figure(env: GridWorld, frames: List[dict], index: int,
         ax_q.grid(axis="y", visible=False)
         span = max(abs(q).max(), 1e-6)
         ax_q.set_xlim(min(q.min(), 0) - 0.35 * span, max(q.max(), 0) + 0.35 * span)
-        _title(ax_q, "Q-values here (dark = chosen)")
+        _title(ax_q, "Q-values at this cell\n(dark = chosen action)")
     return fig
 
 
