@@ -12,3 +12,6 @@ hf_token
 *token*.txt
 *.token
 .env
+
+# written by space/deploy.py into the Space only
+VERSION

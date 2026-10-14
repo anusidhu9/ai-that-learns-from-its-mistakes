@@ -34,6 +34,25 @@ from src.visualization import (AGENT_COLORS, AGENT_LABELS, experiment_bars_figur
                                record_episode, reward_breakdown_figure)
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
+
+
+def code_version() -> str:
+    """Short git commit of the running code, shown in the header so anyone can
+    tell whether a page runs the latest version (compare with GitHub).
+
+    Deployed copies without git history (the Hugging Face Space) read the
+    VERSION file that space/deploy.py writes."""
+    import subprocess
+    stamp = RESULTS_DIR.parent / "VERSION"
+    if stamp.exists():
+        return stamp.read_text(encoding="utf-8").strip()
+    try:
+        out = subprocess.run(["git", "log", "-1", "--format=%h (%cd)", "--date=short"],
+                             cwd=RESULTS_DIR.parent, capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
 AGENT_CHOICES = [(f"{AGENT_LABELS[a]} ({fun.NICKNAMES[a]})", a)
                  for a in ("tabular_q", "dqn", "dqn_per", "random")]
 PRESET_CHOICES = list(PRESETS)
@@ -432,7 +451,8 @@ def build_app() -> gr.Blocks:
         state = gr.State(new_session())
         gr.Markdown("# 🧠 MIND: an AI that learns from its own mistakes\n"
                     "Reinforcement-learning agents get rewarded, penalised, and (eventually) "
-                    "wiser. Train one, watch it bonk into walls, and see whether it improves.",
+                    "wiser. Train one, watch it bonk into walls, and see whether it improves.\n\n"
+                    f"<small>Version {code_version()}</small>",
                     elem_id="hero")
 
         with gr.Tab("📊 Results"):

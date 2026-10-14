@@ -12,6 +12,7 @@ What each stage of MIND added or changed, with the reason behind each change.
 **Fixed**
 - Chart headings overlapping chart titles in the dashboard: Gradio's plot labels (drawn over each chart's top-left corner) are hidden, and every legend now sits in a row below its chart instead of inside the plot, where it covered lines and bars. A test checks that no legend overlaps a plot or title and no two titles overlap.
 - Long replay titles split over two lines; the significance-test table has column widths so verdicts are no longer cut off.
+- The dashboard header shows the version (git commit and date) it is running, so an old copy still running somewhere (for example a Colab session started before an update) is easy to spot. `space/deploy.py` stamps the same version into the Space. All 342 charts the dashboard can draw were checked: none has overlapping or cut-off text.
 - The Colab notebook now draws its charts with `src/visualization.py` (the dashboard's own code), so its legends also sit below the charts and its greedy-path panels have two-line titles. It enables inline charts explicitly (the first chart previously appeared only as text in some environments) and explains that an open session must be restarted after pulling new code.
 
 ## Stages 6 & 7: visualization, Gradio dashboard, and the lighter side

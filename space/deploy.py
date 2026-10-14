@@ -45,6 +45,9 @@ def build(stage: Path) -> None:
     shutil.copy2(ROOT / "LICENSE", stage / "LICENSE")
     for name in ("README.md", "app.py", "requirements.txt"):
         shutil.copy2(SPACE_FILES / name, stage / name)
+    # The Space has no git history, so stamp the version shown in the app header.
+    version = git("log", "-1", "--format=%h (%cd)", "--date=short", cwd=ROOT)
+    (stage / "VERSION").write_text(version + "\n", encoding="utf-8")
 
 
 def git(*args: str, cwd: Path) -> str:

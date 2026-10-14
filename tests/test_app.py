@@ -79,3 +79,10 @@ def test_race_tab():
     status, fig, table = last
     assert "one seed" in status
     assert len(table) == 2
+
+
+def test_header_shows_code_version(tmp_path, monkeypatch):
+    assert app.code_version() != ""
+    monkeypatch.setattr(app, "RESULTS_DIR", tmp_path / "results")
+    (tmp_path / "VERSION").write_text("abc1234 (2026-10-14)\n")
+    assert app.code_version() == "abc1234 (2026-10-14)"
