@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
 from src.agents import EpsilonSchedule, TabularQAgent
@@ -61,7 +62,8 @@ def test_experiment_figures_from_saved_results():
     bars = experiment_bars_figure(exp["summary"], "success")
     assert len(bars.axes) == 2                                # train and unseen panels
     curves = experiment_curves_figure(exp["curves"], "mistakes")
-    labels = {t.get_text() for t in curves.axes[0].get_legend().get_texts()}
+    assert curves.axes[0].get_legend() is None          # legend sits below the chart
+    labels = {t.get_text() for t in curves.legends[0].get_texts()}
     assert labels == {"Random", "Tabular Q", "DQN"}
 
 
@@ -90,3 +92,45 @@ def test_recorded_episode_is_the_greedy_evaluation_episode():
     frames = record_episode(make_env("maze"), agent, seed=3)
     result = evaluate_agent(agent, make_env("maze"), episodes=1, seed=3)
     assert frames[-1]["episode"]["steps"] == result["episodes"][0]["steps"]
+
+
+def _boxes_overlap(a, b) -> bool:
+    return a.x0 < b.x1 and b.x0 < a.x1 and a.y0 < b.y1 and b.y0 < a.y1
+
+
+def _all_figures(trainer):
+    env = make_env("maze")
+    agent = TabularQAgent(4, epsilon=EpsilonSchedule(decay_episodes=30), seed=0)
+    train_agent(env, agent, 40, seed=0)
+    replay_env = make_env("maze")
+    frames = record_episode(replay_env, agent)
+    figs = [learning_curves_figure({"tabular_q": trainer.history, "random": trainer.history}),
+            mistake_types_figure(trainer.history),
+            reward_breakdown_figure(trainer.history),
+            mistake_heatmap_figure(trainer.env.grid, trainer.mistakes, range(0, 20),
+                                   range(40, 60), start=trainer.env.start),
+            maze_figure(trainer.env, title="maze layout"),
+            frame_figure(replay_env, frames, len(frames) // 2)]
+    for name in ("fixed_maze", "generalization"):
+        if (RESULTS / name).exists():
+            exp = load_experiment(RESULTS / name)
+            figs += [experiment_curves_figure(exp["curves"], "success"),
+                     experiment_bars_figure(exp["summary"], "success")]
+    return figs
+
+
+def test_no_legend_or_title_overlaps(trained):
+    for fig in _all_figures(trained):
+        canvas = FigureCanvasAgg(fig)   # pyplot-free figures need a canvas to measure on
+        canvas.draw()
+        renderer = canvas.get_renderer()
+        legends = [lg.get_window_extent(renderer) for lg in fig.legends]
+        assert not any(ax.get_legend() for ax in fig.axes), "legends must sit outside the plots"
+        plots = [ax.get_window_extent(renderer) for ax in fig.axes if ax.get_label() != "<colorbar>"]
+        titles = [ax.title.get_window_extent(renderer) for ax in fig.axes if ax.get_title(loc="left")]
+        for lg in legends:
+            assert not any(_boxes_overlap(lg, p) for p in plots), "legend covers a plot"
+            assert not any(_boxes_overlap(lg, t) for t in titles), "legend covers a title"
+        for i, t in enumerate(titles):
+            for other in titles[i + 1:]:
+                assert not _boxes_overlap(t, other), "two titles overlap"

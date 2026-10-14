@@ -91,7 +91,7 @@ def _tests_frame(results: List[dict]) -> pd.DataFrame:
             c = compare_agents(results, b, a, "success", split)
             rows.append({"split": split,
                          "comparison": f"{AGENT_LABELS[b]} − {AGENT_LABELS[a]}",
-                         "success difference": round(c["difference"], 2),
+                         "difference": round(c["difference"], 2),
                          "p-value": round(c["p_value"], 3),
                          "verdict": fun.verdict(c["p_value"], c["difference"], b, a)})
     return pd.DataFrame(rows)
@@ -448,7 +448,8 @@ def build_app() -> gr.Blocks:
             gr.Markdown("#### Mean ± 95% confidence interval across seeds")
             summary_df = gr.Dataframe(interactive=False, wrap=True)
             gr.Markdown("#### Are the differences real? (permutation tests on success rate)")
-            tests_df = gr.Dataframe(interactive=False, wrap=True)
+            tests_df = gr.Dataframe(interactive=False, wrap=True,
+                                    column_widths=["8%", "18%", "11%", "9%", "54%"])
             outputs = [exp_md, bars, curves, summary_df, tests_df]
             exp_dd.change(show_results, [exp_dd, metric_dd], outputs)
             metric_dd.change(show_results, [exp_dd, metric_dd], outputs)

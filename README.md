@@ -138,6 +138,8 @@ results/            saved experiment results (summaries, per-run metrics, curves
 docs/figures/       figures used here and in the report
 MIND_Colab.ipynb    end-to-end notebook
 REPORT.md           final report
+REPORT_TEMPLATE.md  template for writing up new experiments
+docs/PUBLISHING.md  how to publish on GitHub, Colab and Hugging Face Spaces
 CHANGELOG.md        what changed at each stage, and why
 LICENSE             MIT License
 ```
@@ -149,7 +151,7 @@ LICENSE             MIT License
 - One set of hyperparameters per algorithm, tuned on the fixed maze only.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 
-See [REPORT.md](REPORT.md) for the full discussion.
+See [REPORT.md](REPORT.md) for the full discussion. To write up a new experiment, start from [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md); to publish your own copy, follow [docs/PUBLISHING.md](docs/PUBLISHING.md).
 
 ## License
 

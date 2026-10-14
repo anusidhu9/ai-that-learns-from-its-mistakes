@@ -62,6 +62,18 @@ def _style(ax) -> None:
     ax.yaxis.label.set_color(MUTED)
 
 
+def _legend_below(fig: Figure, ax) -> None:
+    """One legend row underneath the chart, outside every plot area.
+
+    A legend inside the axes can cover lines, bars or bands (and, near the
+    top, crowd the title), so legends always go below the figure instead.
+    """
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, loc="outside lower center", ncols=len(handles),
+                   frameon=False, fontsize=9)
+
+
 def _title(ax, text: str) -> None:
     ax.set_title(text, loc="left", color=INK, fontsize=11, fontweight="bold")
 
@@ -184,7 +196,7 @@ def learning_curves_figure(histories: Dict[str, List[dict]], window: int = 25) -
     ax_m.set_ylim(bottom=0)
     for ax in (ax_s, ax_m):
         ax.set_xlabel("Training episode")
-        ax.legend(frameon=False, fontsize=9)
+    _legend_below(fig, ax_s)  # both panels share the same agents
     return fig
 
 
@@ -204,7 +216,7 @@ def mistake_types_figure(history: List[dict], window: int = 25) -> Figure:
     ax.set_xlabel("Training episode")
     ax.set_ylabel("per episode")
     ax.set_ylim(bottom=0)
-    ax.legend(frameon=False, fontsize=9, ncols=4)
+    _legend_below(fig, ax)
     return fig
 
 
@@ -233,7 +245,7 @@ def reward_breakdown_figure(history: List[dict], window: int = 50) -> Figure:
     ax.grid(axis="y", visible=False)
     _title(ax, "Where the reward comes from (mean per episode)")
     ax.set_xlabel("reward")
-    ax.legend(frameon=False, fontsize=9, loc="lower right")
+    _legend_below(fig, ax)
     lo = min(min(early), min(late), 0)
     hi = max(max(early), max(late), 0)
     pad = 0.25 * (hi - lo or 1)
@@ -297,7 +309,7 @@ def experiment_curves_figure(curves: List[dict], metric: str = "success",
         ax.set_ylim(-0.03, 1.05)
     else:
         ax.set_ylim(bottom=0)
-    ax.legend(frameon=False, fontsize=9)
+    _legend_below(fig, ax)
     return fig
 
 

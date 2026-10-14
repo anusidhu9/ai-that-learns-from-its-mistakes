@@ -2,6 +2,17 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Documentation and chart fixes
+
+**Added**
+- `REPORT_TEMPLATE.md`: a fill-in template for writing up new experiments, with the file each number comes from.
+- `docs/PUBLISHING.md`: how to publish on GitHub, open in Colab and host on Hugging Face Spaces, including keeping tokens out of the repository.
+- `space/`: the Hugging Face Space files and `deploy.py`; `LICENSE` (MIT).
+
+**Fixed**
+- Chart headings overlapping chart titles in the dashboard: Gradio's plot labels (drawn over each chart's top-left corner) are hidden, and every legend now sits in a row below its chart instead of inside the plot, where it covered lines and bars. A test checks that no legend overlaps a plot or title and no two titles overlap.
+- Long replay titles split over two lines; the significance-test table has column widths so verdicts are no longer cut off.
+
 ## Stages 6 & 7: visualization, Gradio dashboard, and the lighter side
 
 **Added**
