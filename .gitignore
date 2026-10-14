@@ -5,3 +5,8 @@ __pycache__/
 runs/
 checkpoints/
 .ipynb_checkpoints/
+
+# secrets: never commit tokens or keys
+hf_token
+*.token
+.env

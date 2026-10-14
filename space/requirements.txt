@@ -1,0 +1,8 @@
+# Hugging Face Space dependencies. Gradio itself is installed by the Space
+# (sdk_version in README.md), so it is not listed here.
+# The CPU-only PyTorch wheel is much smaller than the default CUDA build.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu
+numpy>=1.24
+matplotlib>=3.7
+pandas>=2.0
