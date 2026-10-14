@@ -8,5 +8,7 @@ checkpoints/
 
 # secrets: never commit tokens or keys
 hf_token
+*_token
+*token*.txt
 *.token
 .env
