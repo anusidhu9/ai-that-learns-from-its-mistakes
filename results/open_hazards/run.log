@@ -1,0 +1,179 @@
+Experiment open_hazards: Fixed 8x8 open grid with 5 hazards and a random start/goal.
+  random     seed 0  episode    50  greedy success 0.30  mistakes 69.8
+  random     seed 0  episode   100  greedy success 0.30  mistakes 69.8
+  random     seed 0  episode   150  greedy success 0.30  mistakes 69.8
+  random     seed 0  episode   200  greedy success 0.30  mistakes 69.8
+  random     seed 0  episode   250  greedy success 0.30  mistakes 69.8
+  random     seed 0  episode   300  greedy success 0.30  mistakes 69.8
+  random     seed 0  episode   350  greedy success 0.30  mistakes 69.8
+  random     seed 0  episode   400  greedy success 0.30  mistakes 69.8
+  random     seed 1  episode    50  greedy success 0.40  mistakes 60.6
+  random     seed 1  episode   100  greedy success 0.40  mistakes 60.6
+  random     seed 1  episode   150  greedy success 0.40  mistakes 60.6
+  random     seed 1  episode   200  greedy success 0.40  mistakes 60.6
+  random     seed 1  episode   250  greedy success 0.40  mistakes 60.6
+  random     seed 1  episode   300  greedy success 0.40  mistakes 60.6
+  random     seed 1  episode   350  greedy success 0.40  mistakes 60.6
+  random     seed 1  episode   400  greedy success 0.40  mistakes 60.6
+  random     seed 2  episode    50  greedy success 0.40  mistakes 76.1
+  random     seed 2  episode   100  greedy success 0.40  mistakes 76.1
+  random     seed 2  episode   150  greedy success 0.40  mistakes 76.1
+  random     seed 2  episode   200  greedy success 0.40  mistakes 76.1
+  random     seed 2  episode   250  greedy success 0.40  mistakes 76.1
+  random     seed 2  episode   300  greedy success 0.40  mistakes 76.1
+  random     seed 2  episode   350  greedy success 0.40  mistakes 76.1
+  random     seed 2  episode   400  greedy success 0.40  mistakes 76.1
+  random     seed 3  episode    50  greedy success 0.70  mistakes 51.6
+  random     seed 3  episode   100  greedy success 0.70  mistakes 51.6
+  random     seed 3  episode   150  greedy success 0.70  mistakes 51.6
+  random     seed 3  episode   200  greedy success 0.70  mistakes 51.6
+  random     seed 3  episode   250  greedy success 0.70  mistakes 51.6
+  random     seed 3  episode   300  greedy success 0.70  mistakes 51.6
+  random     seed 3  episode   350  greedy success 0.70  mistakes 51.6
+  random     seed 3  episode   400  greedy success 0.70  mistakes 51.6
+  random     seed 4  episode    50  greedy success 0.20  mistakes 74.9
+  random     seed 4  episode   100  greedy success 0.20  mistakes 74.9
+  random     seed 4  episode   150  greedy success 0.20  mistakes 74.9
+  random     seed 4  episode   200  greedy success 0.20  mistakes 74.9
+  random     seed 4  episode   250  greedy success 0.20  mistakes 74.9
+  random     seed 4  episode   300  greedy success 0.20  mistakes 74.9
+  random     seed 4  episode   350  greedy success 0.20  mistakes 74.9
+  random     seed 4  episode   400  greedy success 0.20  mistakes 74.9
+  tabular_q  seed 0  episode    50  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 0  episode   100  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 0  episode   150  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 0  episode   200  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 0  episode   250  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 0  episode   300  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 0  episode   350  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 0  episode   400  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 1  episode    50  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 1  episode   100  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 1  episode   150  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 1  episode   200  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 1  episode   250  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 1  episode   300  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 1  episode   350  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 1  episode   400  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 2  episode    50  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 2  episode   100  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 2  episode   150  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 2  episode   200  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 2  episode   250  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 2  episode   300  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 2  episode   350  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 2  episode   400  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 3  episode    50  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 3  episode   100  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 3  episode   150  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 3  episode   200  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 3  episode   250  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 3  episode   300  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 3  episode   350  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 3  episode   400  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 4  episode    50  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 4  episode   100  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 4  episode   150  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 4  episode   200  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 4  episode   250  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 4  episode   300  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 4  episode   350  greedy success 1.00  mistakes 0.0
+  tabular_q  seed 4  episode   400  greedy success 1.00  mistakes 0.0
+  dqn        seed 0  episode    50  greedy success 0.00  mistakes 98.0
+  dqn        seed 0  episode   100  greedy success 1.00  mistakes 0.0
+  dqn        seed 0  episode   150  greedy success 1.00  mistakes 0.0
+  dqn        seed 0  episode   200  greedy success 1.00  mistakes 0.0
+  dqn        seed 0  episode   250  greedy success 1.00  mistakes 0.0
+  dqn        seed 0  episode   300  greedy success 1.00  mistakes 0.0
+  dqn        seed 0  episode   350  greedy success 1.00  mistakes 0.0
+  dqn        seed 0  episode   400  greedy success 1.00  mistakes 0.0
+  dqn        seed 1  episode    50  greedy success 1.00  mistakes 0.0
+  dqn        seed 1  episode   100  greedy success 1.00  mistakes 0.0
+  dqn        seed 1  episode   150  greedy success 1.00  mistakes 0.0
+  dqn        seed 1  episode   200  greedy success 1.00  mistakes 0.0
+  dqn        seed 1  episode   250  greedy success 1.00  mistakes 0.0
+  dqn        seed 1  episode   300  greedy success 1.00  mistakes 0.0
+  dqn        seed 1  episode   350  greedy success 1.00  mistakes 0.0
+  dqn        seed 1  episode   400  greedy success 1.00  mistakes 0.0
+  dqn        seed 2  episode    50  greedy success 0.00  mistakes 93.0
+  dqn        seed 2  episode   100  greedy success 1.00  mistakes 0.0
+  dqn        seed 2  episode   150  greedy success 1.00  mistakes 0.0
+  dqn        seed 2  episode   200  greedy success 1.00  mistakes 0.0
+  dqn        seed 2  episode   250  greedy success 1.00  mistakes 0.0
+  dqn        seed 2  episode   300  greedy success 1.00  mistakes 0.0
+  dqn        seed 2  episode   350  greedy success 1.00  mistakes 0.0
+  dqn        seed 2  episode   400  greedy success 1.00  mistakes 0.0
+  dqn        seed 3  episode    50  greedy success 0.00  mistakes 94.0
+  dqn        seed 3  episode   100  greedy success 1.00  mistakes 0.0
+  dqn        seed 3  episode   150  greedy success 1.00  mistakes 0.0
+  dqn        seed 3  episode   200  greedy success 1.00  mistakes 0.0
+  dqn        seed 3  episode   250  greedy success 1.00  mistakes 0.0
+  dqn        seed 3  episode   300  greedy success 1.00  mistakes 0.0
+  dqn        seed 3  episode   350  greedy success 1.00  mistakes 0.0
+  dqn        seed 3  episode   400  greedy success 1.00  mistakes 0.0
+  dqn        seed 4  episode    50  greedy success 0.00  mistakes 98.0
+  dqn        seed 4  episode   100  greedy success 1.00  mistakes 0.0
+  dqn        seed 4  episode   150  greedy success 1.00  mistakes 0.0
+  dqn        seed 4  episode   200  greedy success 1.00  mistakes 0.0
+  dqn        seed 4  episode   250  greedy success 1.00  mistakes 0.0
+  dqn        seed 4  episode   300  greedy success 1.00  mistakes 0.0
+  dqn        seed 4  episode   350  greedy success 1.00  mistakes 0.0
+  dqn        seed 4  episode   400  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 0  episode    50  greedy success 0.00  mistakes 97.0
+  dqn_per    seed 0  episode   100  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 0  episode   150  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 0  episode   200  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 0  episode   250  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 0  episode   300  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 0  episode   350  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 0  episode   400  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 1  episode    50  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 1  episode   100  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 1  episode   150  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 1  episode   200  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 1  episode   250  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 1  episode   300  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 1  episode   350  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 1  episode   400  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 2  episode    50  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 2  episode   100  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 2  episode   150  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 2  episode   200  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 2  episode   250  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 2  episode   300  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 2  episode   350  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 2  episode   400  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 3  episode    50  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 3  episode   100  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 3  episode   150  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 3  episode   200  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 3  episode   250  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 3  episode   300  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 3  episode   350  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 3  episode   400  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 4  episode    50  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 4  episode   100  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 4  episode   150  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 4  episode   200  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 4  episode   250  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 4  episode   300  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 4  episode   350  greedy success 1.00  mistakes 0.0
+  dqn_per    seed 4  episode   400  greedy success 1.00  mistakes 0.0
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent      split    seeds             success     path_efficiency               steps            mistakes             hazards
+-----------------------------------------------------------------------------------------------------------------------------
+random     train        5       0.40 +/- 0.23       0.07 +/- 0.05     79.62 +/- 13.15     66.60 +/- 12.88      11.40 +/- 5.24
+tabular_q  train        5       1.00 +/- 0.00       1.00 +/- 0.00       7.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+dqn        train        5       1.00 +/- 0.00       1.00 +/- 0.00       7.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+dqn_per    train        5       1.00 +/- 0.00       1.00 +/- 0.00       7.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+
+Success-rate differences (permutation test):
+  [train] tabular_q - random: +0.60  (p = 0.008)
+  [train] dqn - random: +0.60  (p = 0.008)
+  [train] dqn_per - random: +0.60  (p = 0.008)
+  [train] dqn - tabular_q: +0.00  (p = 1.000)
+  [train] dqn_per - tabular_q: +0.00  (p = 1.000)
+  [train] dqn_per - dqn: +0.00  (p = 1.000)
+
+Files written to C:\Users\DELL\AppData\Local\Temp\mind_exp\open_hazards

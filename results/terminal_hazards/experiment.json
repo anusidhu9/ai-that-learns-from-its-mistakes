@@ -1,0 +1,26 @@
+{
+  "name": "terminal_hazards",
+  "env_preset": "maze_hazards",
+  "env_overrides": {
+    "hazard_terminal": true
+  },
+  "agents": [
+    "random",
+    "tabular_q",
+    "dqn"
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "episodes": 400,
+  "decay_episodes": 300,
+  "eval_every": 50,
+  "eval_episodes": 10,
+  "unseen_layouts": null,
+  "agent_kwargs": {},
+  "description": "Same maze, but stepping on a hazard ends the episode."
+}

@@ -64,6 +64,7 @@ def run_episode(env: GridWorld, agent, train: bool = True, greedy: bool = False,
     obs, _ = env.reset(seed=seed, layout_seed=layout_seed)
     epsilon = 0.0 if greedy else agent.epsilon
     td_errors, losses = [], []
+    info: dict = {}
     done = False
     while not done:
         action = agent.act(obs, greedy=greedy)
@@ -83,8 +84,13 @@ def run_episode(env: GridWorld, agent, train: bool = True, greedy: bool = False,
     summary["epsilon"] = epsilon
     summary["td_error"] = float(np.mean(td_errors)) if td_errors else math.nan
     summary["loss"] = float(np.mean(losses)) if losses else math.nan
+    # Shortest hazard-free path / steps taken, for successful episodes that
+    # touched no hazard; 0 otherwise. Crossing a hazard can be shorter than the
+    # safe optimum, so counting those episodes would push efficiency above 1
+    # and reward the shortcut.
     opt = summary["optimal_length"]
-    summary["path_efficiency"] = (opt / summary["steps"]) if summary["success"] and opt else 0.0
+    safe_success = summary["success"] and summary["hazards"] == 0 and opt
+    summary["path_efficiency"] = (opt / summary["steps"]) if safe_success else 0.0
     summary.update(reward_breakdown(summary, env.config.rewards))
     summary["mistake_log"] = list(env.mistake_log)
     return summary
@@ -311,6 +317,7 @@ class Trainer:
         return row
 
     def _append_logs(self, rows: List[dict], mistakes: List[dict]) -> None:
+        assert self.run_dir is not None, "logs are only written for runs with a run_dir"
         episodes_path = self.run_dir / EPISODES_FILE
         new_file = not episodes_path.exists()
         with open(episodes_path, "a", newline="") as f:
@@ -323,6 +330,7 @@ class Trainer:
                 f.write(json.dumps(m) + "\n")
 
     def _rewrite_logs(self) -> None:
+        assert self.run_dir is not None, "logs are only written for runs with a run_dir"
         for name in (EPISODES_FILE, MISTAKES_FILE):
             (self.run_dir / name).unlink(missing_ok=True)
         self._append_logs(self.history, self.mistakes)
@@ -385,7 +393,7 @@ PHASE_METRICS = ["success", "steps", "total_reward", "path_efficiency", "mistake
                  "collisions", "hazards", "revisits", "timeout"]
 
 
-def compare_phases(history: List[dict], window: int = 50) -> Dict[str, Dict[str, float]]:
+def compare_phases(history: List[dict], window: int = 50) -> dict:
     """Mean of each metric over the first and last `window` episodes.
 
     Returns {"early": {...}, "late": {...}, "change": {late - early}}. This is a

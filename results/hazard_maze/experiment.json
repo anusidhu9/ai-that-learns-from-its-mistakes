@@ -1,0 +1,25 @@
+{
+  "name": "hazard_maze",
+  "env_preset": "maze_hazards",
+  "env_overrides": {},
+  "agents": [
+    "random",
+    "tabular_q",
+    "dqn",
+    "dqn_per"
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "episodes": 400,
+  "decay_episodes": 300,
+  "eval_every": 50,
+  "eval_episodes": 10,
+  "unseen_layouts": null,
+  "agent_kwargs": {},
+  "description": "Fixed 9x9 maze with 4 non-terminal hazards (-0.5 each)."
+}

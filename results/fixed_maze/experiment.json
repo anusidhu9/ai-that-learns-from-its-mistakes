@@ -1,0 +1,25 @@
+{
+  "name": "fixed_maze",
+  "env_preset": "maze",
+  "env_overrides": {},
+  "agents": [
+    "random",
+    "tabular_q",
+    "dqn",
+    "dqn_per"
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "episodes": 400,
+  "decay_episodes": 300,
+  "eval_every": 50,
+  "eval_episodes": 10,
+  "unseen_layouts": null,
+  "agent_kwargs": {},
+  "description": "One fixed 9x9 maze: can each agent learn to solve it without mistakes?"
+}

@@ -260,3 +260,25 @@ def test_cli_trains_and_resumes(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Resuming" in out and "at episode 60 of 100" in out
     assert len(load_history(run)) == 100
+
+
+def test_path_efficiency_never_rewards_hazard_shortcuts():
+    layout = """
+    #######
+    #S.H.G#
+    #.###.#
+    #.....#
+    #######
+    """
+    env = GridWorld.from_ascii(layout, EnvConfig(hazard_terminal=False, max_steps=30))
+
+    class Scripted:                      # walks straight through the hazard
+        rng = np.random.default_rng(0)
+        epsilon = 0.0
+        def act(self, obs, greedy=False):
+            return 1                     # right
+
+    shortcut = run_episode(env, Scripted(), train=False)
+    assert shortcut["success"] and shortcut["hazards"] == 1
+    assert shortcut["steps"] == 4 < shortcut["optimal_length"] == 8
+    assert shortcut["path_efficiency"] == 0.0
