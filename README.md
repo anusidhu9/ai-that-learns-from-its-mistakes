@@ -139,6 +139,7 @@ docs/figures/       figures used here and in the report
 MIND_Colab.ipynb    end-to-end notebook
 REPORT.md           final report
 CHANGELOG.md        what changed at each stage, and why
+LICENSE             MIT License
 ```
 
 ## Limitations
@@ -149,3 +150,7 @@ CHANGELOG.md        what changed at each stage, and why
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 
 See [REPORT.md](REPORT.md) for the full discussion.
+
+## License
+
+Released under the [MIT License](LICENSE).
