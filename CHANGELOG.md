@@ -2,6 +2,11 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## generalization with 10 seeds
+
+- `generalization` now uses 10 seeds (was 3). With 3 seeds no difference could reach p < 0.10; with 10, DQN generalizes better than tabular Q-learning: 45% vs 34% success on 50 unseen mazes (p = 0.003, ahead in 9 of 10 seeds), with path efficiency 0.45 vs 0.15 (p < 0.001). On the training mazes they are level (p = 0.56). Seeds 0–2 were retrained and reproduced the earlier results exactly. `results/generalization`, README, REPORT (Sections 1, 5, 6.5, 7, 9–11), notebook section 11 and the generalization figure are updated.
+- The notebook's significance table uses the shared p-value formatter, so it shows "p < 0.001" instead of "0.000".
+
 ## hazard_maze with 10 seeds
 
 - `hazard_maze` now uses 10 seeds (was 5). The hazard-shortcut difference that was not established with 5 seeds (p = 0.21) is established with 10: tabular Q-learning crossed a hazard in 9 of 10 runs, DQN in 1 (p = 0.002). One DQN run solved the maze and then unlearned it, so DQN's success is 0.90. Seeds 0–4 were retrained and reproduced the earlier results exactly. `results/hazard_maze`, the README, REPORT (Sections 1, 5, 6.2, 7–11), notebook section 11 and the hazard figure are updated.

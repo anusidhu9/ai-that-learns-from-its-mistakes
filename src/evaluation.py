@@ -194,9 +194,9 @@ EXPERIMENTS: Dict[str, Experiment] = {
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},
-        agents=("random", "tabular_q", "dqn"), seeds=(0, 1, 2),
+        agents=("random", "tabular_q", "dqn"), seeds=tuple(range(10)),
         episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=UNSEEN,
-        description="Train on 50 maze layouts with a local 5x5 view, test on 50 unseen layouts."),
+        description="Train on 50 maze layouts with a local 5x5 view, test on 50 unseen layouts; 10 seeds."),
 }
 
 

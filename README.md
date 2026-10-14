@@ -9,7 +9,7 @@
 
 Reinforcement-learning agents explore grid worlds, get **rewarded** for reaching the goal and **penalised** for mistakes (hitting walls, stepping on hazards, revisiting cells, running out of time), and are then tested to see whether they actually got better. Everything runs on a free CPU: Google Colab or a laptop.
 
-The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN) and DQN with prioritized experience replay across five experiments, 3–10 seeds each, with greedy evaluation, 95% confidence intervals and permutation tests. It includes an interactive **Gradio dashboard** and a mildly sarcastic commentator.
+The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN) and DQN with prioritized experience replay across five experiments, 5–10 seeds each, with greedy evaluation, 95% confidence intervals and permutation tests. It includes an interactive **Gradio dashboard** and a mildly sarcastic commentator.
 
 ![Mistakes at each cell early vs late in training](docs/figures/mistake_heatmap.png)
 
@@ -25,7 +25,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 | `hazard_maze`: 4 hazards (−0.5 each), 10 seeds | 0.15 ± 0.05 | **1.00** ± 0.00 | 0.90 ± 0.23 | **1.00** ± 0.00 |
 | `terminal_hazards`: a hazard ends the episode | 0.00 ± 0.00 | **1.00** ± 0.00 | 0.20 ± 0.56 | — |
 | `open_hazards`: 8×8 open grid, 5 hazards | 0.40 ± 0.23 | **1.00** ± 0.00 | **1.00** ± 0.00 | **1.00** ± 0.00 |
-| `generalization`: **unseen** mazes, 3 seeds | 0.07 ± 0.03 | 0.29 ± 0.06 | 0.45 ± 0.15 | — |
+| `generalization`: **unseen** mazes, 10 seeds | 0.06 ± 0.02 | 0.34 ± 0.06 | **0.45** ± 0.03 | — |
 
 *Success rate (fraction of greedy episodes that reach the goal).*
 
@@ -34,10 +34,12 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **Mistake counts alone can lie.** When hazards end the episode, DQN learned to walk into one in 4 of 5 seeds: dying quickly (−0.51) was cheaper than wandering for 100 steps (about −3.6). Its mistake count looked better than random's while its success rate was 0.20 (vs 1.00 for tabular Q, p = 0.048).
 - **DQN learns to avoid hazards that tabular Q-learning walks through.** On `hazard_maze` the safe route is 18 steps and a 12-step route crosses one hazard (−0.5, a worse total reward). Tabular Q took the hazard shortcut in 9 of 10 seeds, DQN in 1 of 10 (p = 0.002) and DQN + PER in 3 of 10 (p = 0.02 against tabular Q).
 - **But DQN is less reliable.** One of DQN's 10 hazard-maze runs solved the maze from episode 150 to 350, then unlearned it and ended the run walking into a wall, and one DQN + PER run on `fixed_maze` never solved its maze at all. Tabular Q reached the goal in all 25 of its fixed-layout runs.
+- **DQN generalizes better to mazes it has never seen.** Trained on 50 mazes and tested on 50 new ones, DQN reached the goal in 45% of unseen mazes against 34% for tabular Q (p = 0.003), and was ahead in 9 of 10 seeds. Its successes on new mazes were near-shortest paths (path efficiency 0.45 vs 0.15, p < 0.001), while tabular Q's were mostly long wanders. On the training mazes the two were level (0.75 vs 0.73, p = 0.56).
 - **Prioritized replay did not help** on these small tasks.
 
 **What it does not (yet) support**
-- On unseen mazes DQN was ahead of tabular Q on every seed (0.40–0.52 vs 0.26–0.30), but with 3 seeds the smallest possible p-value is 0.10. More seeds are needed before claiming it generalizes better.
+- Whether prioritized replay helps or hurts: DQN + PER never differed significantly from plain DQN.
+- How common DQN's late collapse is: it happened in 1 of 10 hazard-maze runs, too few to estimate a rate.
 
 | Learning to avoid mistakes (fixed maze) | When fewer mistakes is not better (terminal hazards) |
 |---|---|
@@ -89,7 +91,7 @@ python -m src.evaluation --experiment fixed_maze --seeds 2 --agents random tabul
 python -m src.visualization                                   # regenerate docs/figures from results/
 ```
 
-Experiments are **resumable**: if Colab disconnects, run the same command again and finished runs are skipped while interrupted ones continue from their last checkpoint. On a laptop CPU the four fixed-layout experiments take roughly 10–30 minutes each (DQN dominates the time); `generalization`, with 3,000 episodes per run, takes considerably longer.
+Experiments are **resumable**: if Colab disconnects, run the same command again and finished runs are skipped while interrupted ones continue from their last checkpoint. On a laptop CPU the four fixed-layout experiments take roughly 10–30 minutes each (DQN dominates the time); `generalization` (3,000 episodes per run, about 9 minutes per DQN run) takes a few hours with all 10 seeds.
 
 ## How it works
 
@@ -153,7 +155,7 @@ LICENSE             MIT License
 ## Limitations
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
-- 3–10 seeds per experiment: enough to show large differences, not small ones.
+- 5–10 seeds per experiment: enough to show large differences, not small ones.
 - One set of hyperparameters per algorithm, tuned on the fixed maze only.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 

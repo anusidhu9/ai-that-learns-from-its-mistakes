@@ -1,76 +1,34 @@
-Experiment generalization: Train on 50 maze layouts with a local 5x5 view, test on 50 unseen layouts.
-  random     seed 0  episode   500  greedy success 0.14  mistakes 86.9
-  random     seed 0  episode  1000  greedy success 0.14  mistakes 86.9
-  random     seed 0  episode  1500  greedy success 0.14  mistakes 86.9
-  random     seed 0  episode  2000  greedy success 0.14  mistakes 86.9
-  random     seed 0  episode  2500  greedy success 0.14  mistakes 86.9
-  random     seed 0  episode  3000  greedy success 0.14  mistakes 86.9
-  random     seed 1  episode   500  greedy success 0.06  mistakes 89.8
-  random     seed 1  episode  1000  greedy success 0.06  mistakes 89.8
-  random     seed 1  episode  1500  greedy success 0.06  mistakes 89.8
-  random     seed 1  episode  2000  greedy success 0.06  mistakes 89.8
-  random     seed 1  episode  2500  greedy success 0.06  mistakes 89.8
-  random     seed 1  episode  3000  greedy success 0.06  mistakes 89.8
-  random     seed 2  episode   500  greedy success 0.10  mistakes 89.4
-  random     seed 2  episode  1000  greedy success 0.10  mistakes 89.4
-  random     seed 2  episode  1500  greedy success 0.10  mistakes 89.4
-  random     seed 2  episode  2000  greedy success 0.10  mistakes 89.4
-  random     seed 2  episode  2500  greedy success 0.10  mistakes 89.4
-  random     seed 2  episode  3000  greedy success 0.10  mistakes 89.4
-  tabular_q  seed 0  episode   500  greedy success 0.14  mistakes 83.0
-  tabular_q  seed 0  episode  1000  greedy success 0.46  mistakes 52.5
-  tabular_q  seed 0  episode  1500  greedy success 0.46  mistakes 53.1
-  tabular_q  seed 0  episode  2000  greedy success 0.52  mistakes 47.5
-  tabular_q  seed 0  episode  2500  greedy success 0.70  mistakes 28.9
-  tabular_q  seed 0  episode  3000  greedy success 0.84  mistakes 15.4
-  tabular_q  seed 1  episode   500  greedy success 0.20  mistakes 77.8
-  tabular_q  seed 1  episode  1000  greedy success 0.34  mistakes 64.7
-  tabular_q  seed 1  episode  1500  greedy success 0.62  mistakes 36.4
-  tabular_q  seed 1  episode  2000  greedy success 0.56  mistakes 42.1
-  tabular_q  seed 1  episode  2500  greedy success 0.56  mistakes 42.3
-  tabular_q  seed 1  episode  3000  greedy success 0.50  mistakes 48.4
-  tabular_q  seed 2  episode   500  greedy success 0.18  mistakes 78.1
-  tabular_q  seed 2  episode  1000  greedy success 0.30  mistakes 68.9
-  tabular_q  seed 2  episode  1500  greedy success 0.38  mistakes 61.4
-  tabular_q  seed 2  episode  2000  greedy success 0.44  mistakes 54.6
-  tabular_q  seed 2  episode  2500  greedy success 0.64  mistakes 35.1
-  tabular_q  seed 2  episode  3000  greedy success 0.72  mistakes 26.1
-  dqn        seed 0  episode   500  greedy success 0.48  mistakes 49.9
-  dqn        seed 0  episode  1000  greedy success 0.74  mistakes 25.4
-  dqn        seed 0  episode  1500  greedy success 0.60  mistakes 39.3
-  dqn        seed 0  episode  2000  greedy success 0.70  mistakes 29.1
-  dqn        seed 0  episode  2500  greedy success 0.78  mistakes 21.4
-  dqn        seed 0  episode  3000  greedy success 0.66  mistakes 32.2
-  dqn        seed 1  episode   500  greedy success 0.78  mistakes 20.7
-  dqn        seed 1  episode  1000  greedy success 0.54  mistakes 45.0
-  dqn        seed 1  episode  1500  greedy success 0.62  mistakes 36.3
-  dqn        seed 1  episode  2000  greedy success 0.76  mistakes 22.7
-  dqn        seed 1  episode  2500  greedy success 0.82  mistakes 17.2
-  dqn        seed 1  episode  3000  greedy success 0.82  mistakes 16.7
-  dqn        seed 2  episode   500  greedy success 0.74  mistakes 24.8
-  dqn        seed 2  episode  1000  greedy success 0.82  mistakes 17.2
-  dqn        seed 2  episode  1500  greedy success 0.68  mistakes 31.3
-  dqn        seed 2  episode  2000  greedy success 0.72  mistakes 27.2
---- process stopped when the session ended; resumed from the last checkpoint ---
-Experiment generalization: Train on 50 maze layouts with a local 5x5 view, test on 50 unseen layouts.
-  dqn        seed 2  episode  3000  greedy success 0.78  mistakes 21.3
+generalization, 10 seeds (2026-10-14). 30 runs (3 agents x seeds 0-9, 3,000 episodes each) were trained in 4
+parallel worker processes with src.evaluation.run_single, then aggregated with run_experiment. Seeds 0-2
+reproduced the earlier 3-seed results exactly. Final greedy evaluation per run (time per run in brackets):
 
-Greedy evaluation, mean +/- 95% CI across seeds:
-agent      split    seeds             success     path_efficiency               steps            mistakes             hazards
------------------------------------------------------------------------------------------------------------------------------
-random     train        3       0.10 +/- 0.10       0.02 +/- 0.02      97.71 +/- 3.29      88.70 +/- 3.92       0.00 +/- 0.00
-random     unseen       3       0.07 +/- 0.03       0.01 +/- 0.01      97.84 +/- 2.33      88.91 +/- 1.39       0.00 +/- 0.00
-tabular_q  train        3       0.69 +/- 0.43       0.68 +/- 0.42     40.79 +/- 35.27     29.99 +/- 41.84       0.00 +/- 0.00
-tabular_q  unseen       3       0.29 +/- 0.06       0.12 +/- 0.04      84.56 +/- 6.70      74.13 +/- 9.81       0.00 +/- 0.00
-dqn        train        3       0.75 +/- 0.21       0.74 +/- 0.21     35.07 +/- 17.61     23.43 +/- 19.75       0.00 +/- 0.00
-dqn        unseen       3       0.45 +/- 0.15       0.45 +/- 0.15     60.68 +/- 13.12     51.89 +/- 15.33       0.00 +/- 0.00
-
-Success-rate differences (permutation test):
-  [train] tabular_q - random: +0.59  (p = 0.100)
-  [train] dqn - random: +0.65  (p = 0.100)
-  [train] dqn - tabular_q: +0.07  (p = 0.700)
-  [unseen] tabular_q - random: +0.22  (p = 0.100)
-  [unseen] dqn - random: +0.39  (p = 0.100)
-  [unseen] dqn - tabular_q: +0.17  (p = 0.100)
-
-Files written to C:\Users\DELL\AppData\Local\Temp\mind_exp\generalization
+dqn        seed 0: train success 0.66, unseen success 0.44  (555s)
+dqn        seed 1: train success 0.82, unseen success 0.52  (526s)
+dqn        seed 2: train success 0.78, unseen success 0.40  (561s)
+dqn        seed 3: train success 0.88, unseen success 0.50  (519s)
+dqn        seed 4: train success 0.72, unseen success 0.42  (520s)
+dqn        seed 5: train success 0.76, unseen success 0.40  (500s)
+dqn        seed 6: train success 0.84, unseen success 0.46  (496s)
+dqn        seed 7: train success 0.64, unseen success 0.44  (441s)
+dqn        seed 8: train success 0.76, unseen success 0.52  (584s)
+dqn        seed 9: train success 0.68, unseen success 0.42  (587s)
+random     seed 0: train success 0.14, unseen success 0.06  (32s)
+random     seed 1: train success 0.06, unseen success 0.08  (32s)
+random     seed 2: train success 0.10, unseen success 0.06  (31s)
+random     seed 3: train success 0.06, unseen success 0.04  (31s)
+random     seed 4: train success 0.14, unseen success 0.06  (32s)
+random     seed 5: train success 0.04, unseen success 0.08  (31s)
+random     seed 6: train success 0.04, unseen success 0.02  (31s)
+random     seed 7: train success 0.04, unseen success 0.02  (32s)
+random     seed 8: train success 0.06, unseen success 0.08  (32s)
+random     seed 9: train success 0.04, unseen success 0.12  (31s)
+tabular_q  seed 0: train success 0.84, unseen success 0.30  (24s)
+tabular_q  seed 1: train success 0.50, unseen success 0.26  (25s)
+tabular_q  seed 2: train success 0.72, unseen success 0.30  (26s)
+tabular_q  seed 3: train success 0.72, unseen success 0.42  (25s)
+tabular_q  seed 4: train success 0.56, unseen success 0.30  (27s)
+tabular_q  seed 5: train success 0.88, unseen success 0.44  (27s)
+tabular_q  seed 6: train success 0.76, unseen success 0.30  (28s)
+tabular_q  seed 7: train success 0.72, unseen success 0.30  (30s)
+tabular_q  seed 8: train success 0.78, unseen success 0.50  (32s)
+tabular_q  seed 9: train success 0.78, unseen success 0.26  (30s)

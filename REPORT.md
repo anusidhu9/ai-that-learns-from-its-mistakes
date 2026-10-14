@@ -2,13 +2,13 @@
 
 ## 1. Summary
 
-This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 3–10 independent seeds each, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
+This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
 
 Main findings:
 
 1. **Both learning agents learned from their mistakes on every fixed layout.** Greedy success rose from 0.00–0.40 before training to 1.00 for tabular Q-learning in all three fixed-layout experiments with non-terminal hazards, and to 0.90–1.00 for DQN (p ≤ 0.008 against random in every case).
 2. **Fewer mistakes is not the same as better behaviour.** When stepping on a hazard ended the episode, DQN learned in 4 of 5 seeds to walk into the nearest hazard after 6 steps. Under the reward design, a quick death (−0.51) cost less than an unsuccessful 100-step search (about −3.6). Its mistake count fell to 0.8 per episode while its success rate was 0.20, against 1.00 for tabular Q-learning (p = 0.048).
-3. **Generalization to unseen mazes is suggestive but not established.** On 50 held-out mazes DQN succeeded 40–52% of the time per seed against 26–30% for tabular Q-learning and 6–8% for random, and DQN's successes were near-shortest paths while tabular Q's were mostly long wanders. With three seeds, however, no difference can reach p < 0.10.
+3. **DQN generalizes better to unseen mazes.** Trained on 50 mazes and tested on 50 it had never seen, DQN reached the goal 45% of the time against 34% for tabular Q-learning and 6% for random (10 seeds; DQN vs tabular p = 0.003, ahead in 9 of 10 seeds). DQN's successes on new mazes were near-shortest paths, while tabular Q's were mostly long wanders (path efficiency 0.45 vs 0.15, p < 0.001). On the training mazes the two were level.
 4. **DQN avoids hazards that tabular Q-learning walks through, but is less reliable.** With 10 seeds on the hazard maze, tabular Q-learning took a shortcut through a hazard in 9 runs and DQN in 1 (p = 0.002). One DQN run, however, solved the maze and then unlearned it before training ended, something no tabular run did.
 5. **Prioritized experience replay gave no measurable benefit** on these tasks; one of its five fixed-maze runs never solved its maze.
 
@@ -91,7 +91,7 @@ DQN's `train_freq` and `target_update` were tuned on the fixed maze during devel
 - **What.** On a fixed layout, 10 greedy episodes; with a layout pool, one episode on each of the 50 training layouts; for generalization, also one episode on each of 50 held-out layouts (seeds 1000–1049) never used in training.
 - **Metrics.** Success rate; path efficiency (optimal length ÷ steps, for successful episodes that touched no hazard, otherwise 0); steps; mistakes by type; total reward.
 - **Statistics.** Each seed contributes one value. Results are the mean across seeds ± the half-width of a 95% Student-t confidence interval. Two agents are compared with an exact two-sided permutation test on the per-seed values. With 10 seeds per agent the smallest attainable p-value is about 0.00001, with 5 seeds 2/252 ≈ 0.008, and with 3 seeds 0.10.
-- **Seeds.** 10 per agent for `hazard_maze` (first run with 5, then extended to settle an open question; Section 6.2), 5 for the other fixed-layout experiments, 3 for generalization (each DQN run there is 3,000 episodes).
+- **Seeds.** 10 per agent for `hazard_maze` and `generalization` (both first run with fewer seeds, 5 and 3, then extended to settle open questions; Sections 6.2 and 6.5), 5 for the other fixed-layout experiments.
 
 ## 6. Results
 
@@ -168,24 +168,33 @@ By mistake count alone, DQN looks almost as good as tabular Q-learning (0.8 vs 0
 
 All learning agents found the 7-step optimal path with no mistakes in every seed (p = 0.008 against random). This is the easiest task: a short path with few walls.
 
-### 6.5 Generalization to unseen mazes (`generalization`, 3 seeds, 3,000 episodes)
+### 6.5 Generalization to unseen mazes (`generalization`, 10 seeds, 3,000 episodes)
 
 Agents trained on 50 maze layouts with the local 5×5 observation, then were evaluated on those 50 layouts and on 50 they had never seen.
 
 | Agent | Success, training mazes | Success, unseen mazes | Path efficiency, unseen | Mistakes, unseen |
 |---|---|---|---|---|
-| Random | 0.10 ± 0.10 | 0.07 ± 0.03 | 0.01 ± 0.01 | 88.9 ± 1.4 |
-| Tabular Q | 0.69 ± 0.43 | 0.29 ± 0.06 | 0.12 ± 0.04 | 74.1 ± 9.8 |
-| DQN | 0.75 ± 0.21 | 0.45 ± 0.15 | 0.45 ± 0.15 | 51.9 ± 15.3 |
+| Random | 0.07 ± 0.03 | 0.06 ± 0.02 | 0.01 ± 0.00 | 89.6 ± 0.8 |
+| Tabular Q | 0.73 ± 0.08 | 0.34 ± 0.06 | 0.15 ± 0.03 | 70.4 ± 4.1 |
+| DQN | 0.75 ± 0.06 | **0.45 ± 0.03** | **0.45 ± 0.03** | **52.2 ± 3.3** |
 
-Per seed on unseen mazes: DQN 0.44, 0.52, 0.40; tabular Q 0.30, 0.26, 0.30; random 0.06, 0.08, 0.06.
+Per seed on unseen mazes (seeds 0–9):
+
+| Agent | Success per seed |
+|---|---|
+| DQN | 0.44, 0.52, 0.40, 0.50, 0.42, 0.40, 0.46, 0.44, 0.52, 0.42 |
+| Tabular Q | 0.30, 0.26, 0.30, 0.42, 0.30, 0.44, 0.30, 0.30, 0.50, 0.26 |
+| Random | 0.06, 0.08, 0.06, 0.04, 0.06, 0.08, 0.02, 0.02, 0.08, 0.12 |
 
 ![Success on training and unseen mazes](docs/figures/generalization_success.png)
 
-- **Both learners transfer something** to unseen mazes, beating random in every seed, but neither comes close to its training-set performance.
-- **DQN was ahead of tabular Q-learning in every seed** (difference +0.17), but with three seeds the smallest attainable p-value is 0.10, so this is **not statistically established**.
-- **The quality of the successes differs.** DQN's path efficiency on unseen mazes equals its success rate: when it succeeds, it takes a near-shortest path. Tabular Q-learning's efficiency (0.12) is far below its success rate (0.29), so most of its unseen successes are long wanders that happen to reach the goal.
-- **Learning speed differs.** DQN reached 0.67 greedy success on the training mazes by episode 500 and plateaued around 0.7. Tabular Q-learning was still climbing at episode 3,000 (0.17 → 0.37 → 0.49 → 0.51 → 0.63 → 0.69 at 500-episode intervals) and might match DQN on the training mazes with a longer budget.
+- **Both learners transfer something** to unseen mazes, beating random in every seed (p < 0.001), but neither comes close to its training-set performance.
+- **DQN generalizes better than tabular Q-learning:** +0.11 success on unseen mazes, **p = 0.003**, and ahead in 9 of 10 seeds. With the original 3 seeds DQN was ahead in every seed, but the smallest attainable p-value was 0.10; extending to 10 seeds settled it.
+- **The quality of the successes differs even more.** DQN's path efficiency on unseen mazes equals its success rate: when it succeeds, it takes a near-shortest path. Tabular Q-learning's efficiency (0.15) is far below its success rate (0.34), so most of its unseen successes are long wanders that happen to reach the goal. The efficiency difference is +0.30 (p < 0.001).
+- **On the training mazes there is no difference** (0.75 vs 0.73, p = 0.56). The advantage is specifically in transfer, which fits DQN's network generalising between similar local views, where the table can only look up views it has seen.
+- **Learning speed differs.** Averaged over 10 seeds, DQN reached 0.69 greedy success on the training mazes by episode 500 and then stayed between 0.64 and 0.75. Tabular Q-learning was still climbing at episode 3,000 (0.20 → 0.35 → 0.42 → 0.56 → 0.66 → 0.73 at 500-episode intervals) and might eventually overtake DQN on the training mazes with a longer budget; whether its transfer would improve too is untested.
+
+The 3 original runs per agent were retrained from scratch and reproduced the earlier results exactly (all 18 values), as with `hazard_maze`.
 
 A development check with the full-map observation showed tabular Q-learning near random on unseen layouts (6–10% success): every new layout produces observations the table has never seen.
 
@@ -200,7 +209,7 @@ A development check with the full-map observation showed tabular Q-learning near
 
 **Reward design shapes what counts as a mistake.** With terminal hazards and per-step penalties, dying is the reward-maximising choice for an agent that cannot yet find the goal. Whether that is a "mistake" depends on the designer's intent, not on the agent's objective.
 
-**Tabular Q-learning versus DQN.** Each has a clear strength. Tabular Q-learning is faster (greedy-perfect within 50 episodes on the fixed maze), far cheaper per step, and completely reliable on fixed layouts (25 of 25 runs reached the goal). DQN finds the safe route on the hazard maze where tabular Q-learning settles on a hazard shortcut (Section 6.2), and it may generalise better to unseen mazes (not yet established). But DQN can unlearn a solved task late in training. Tabular Q-learning also benefits from optimistic initialisation, which DQN lacks, and that difference explains the terminal-hazard result.
+**Tabular Q-learning versus DQN.** Each has a clear strength. Tabular Q-learning is faster (greedy-perfect within 50 episodes on the fixed maze), far cheaper per step, and completely reliable on fixed layouts (25 of 25 runs reached the goal). DQN finds the safe route on the hazard maze where tabular Q-learning settles on a hazard shortcut (Section 6.2), and it generalises better to unseen mazes, with more successes and far more direct paths (Section 6.5). But DQN can unlearn a solved task late in training. Tabular Q-learning also benefits from optimistic initialisation, which DQN lacks, and that difference explains the terminal-hazard result.
 
 **Prioritized replay.** On tasks this small, replaying surprising transitions more often gave no benefit, and one PER run converged to a stuck policy. A single failure in five seeds is not evidence that PER hurts.
 
@@ -219,11 +228,11 @@ These are reported because each would have changed the conclusions.
 ## 9. Limitations
 
 - **Small tasks.** 8×8 and 9×9 grids with 100-step episodes, chosen to fit a free CPU. The ranking of algorithms may change on larger problems.
-- **Few seeds.** Five per agent for most experiments (three for generalization) can show large effects only; extending `hazard_maze` from 5 to 10 seeds turned a "not established" difference into an established one. The remaining open questions might be settled the same way.
+- **Few seeds.** Five per agent for three of the five experiments can show large effects only. Extending `hazard_maze` and `generalization` to 10 seeds turned two "not established" differences into established ones; the remaining open questions (PER, how often DQN collapses) might be settled the same way.
 - **Limited tuning.** One hyperparameter setting per algorithm. DQN's update frequency and target-update interval were chosen from four settings on the fixed maze; tabular Q-learning was not tuned at all.
 - **Fixed training budgets.** Tabular Q-learning was still improving at the end of the generalization runs.
 - **Non-Markovian revisit penalty**, as described in Section 3.
-- **Statistics.** t-intervals on 3–10 bounded values are approximate; the charts clip them to the possible range.
+- **Statistics.** t-intervals on 5–10 bounded values are approximate; the charts clip them to the possible range.
 
 ## 10. Reproducibility
 
@@ -237,13 +246,13 @@ python -m src.visualization                             # regenerates docs/figur
 python -m pytest -q                                     # 154 tests
 ```
 
-The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. Experiments are resumable. `generalization` was interrupted when a working session ended and was completed by rerunning the same command, as its log records. `hazard_maze` was extended to 10 seeds by training all 40 runs in parallel worker processes and then aggregating them with the same runner; its first 5 seeds reproduced the original results exactly.
+The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
 
 Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.14.1 (CPU), NumPy 2.4.6, Matplotlib 3.11.2, pandas 3.0.6 and Gradio 6.30.0. Exact reproduction is guaranteed for the same software on the same machine. Other platforms should give statistically similar but not bit-identical numbers, because floating-point results can differ between builds.
 
 ## 11. Future work
 
-- More seeds (10–20) for the remaining open questions: generalization and PER.
+- More seeds (10–20) for the remaining open question about PER, and more runs to estimate how often DQN collapses.
 - The late DQN collapse (Section 6.2): whether it is rare with more seeds, and whether a lower learning rate, a slower target update or early stopping on greedy evaluation prevents it.
 - A larger layout pool, convolutional networks for the full-map observation, and longer training for the generalization study.
 - Optimistic initialisation or count-based exploration bonuses for DQN, to test the explanation of the terminal-hazard failure.
