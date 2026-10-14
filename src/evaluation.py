@@ -373,6 +373,8 @@ def format_summary(summary: List[dict],
 def main(argv: Optional[List[str]] = None) -> None:
     import argparse
 
+    from src import fun  # imported here: src.fun depends on src.training
+
     parser = argparse.ArgumentParser(description="Run a MIND experiment (resumable).")
     parser.add_argument("--experiment", required=True, choices=sorted(EXPERIMENTS))
     parser.add_argument("--root", default="runs/experiments")
@@ -399,6 +401,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 continue
             c = compare_agents(out["results"], b, a, "success", split)
             print(f"  [{split}] {b} - {a}: {c['difference']:+.2f}  (p = {c['p_value']:.3f})")
+            print(f"           {fun.verdict(c['p_value'], c['difference'], b, a)}")
     print(f"\nFiles written to {out['dir']}")
 
 

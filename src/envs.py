@@ -473,9 +473,15 @@ def make_env(name: str = "maze", seed: Optional[int] = None, **overrides) -> Gri
 
 
 if __name__ == "__main__":
+    from src.fun import event_line  # imported here: src.fun depends on this module
+
     for preset in PRESETS:
         env = make_env(preset)
         env.reset(seed=0)
         print(f"== {preset} (layout_seed={env.layout_seed}, "
               f"optimal_length={env.optimal_length}, obs_size={env.obs_size})")
-        print(env.render_text(), end="\n\n")
+        print(env.render_text())
+        # One step straight up from the start, which is always a wall here.
+        _, _, _, _, info = env.step(0)
+        print("First move: up.", " ".join(event_line(e, env.pos) for e in info["events"])
+              or "Nothing happened.", end="\n\n")

@@ -54,6 +54,7 @@ class RandomAgent:
     """Baseline: uniform random actions, never learns."""
 
     name = "random"
+    nickname = "Chaos Monkey"
 
     def __init__(self, n_actions: int, seed: Optional[int] = None):
         self.n_actions = n_actions
@@ -94,6 +95,7 @@ class TabularQAgent:
     """
 
     name = "tabular_q"
+    nickname = "The Spreadsheet"
 
     def __init__(self, n_actions: int, alpha: float = 0.5, gamma: float = 0.99,
                  epsilon: Optional[EpsilonSchedule] = None, seed: Optional[int] = None):
@@ -207,6 +209,9 @@ class QNetwork(nn.Module):
         return self.net(x)
 
 
+DQN_NICKNAMES = {"dqn": "Neural Ned", "dqn_per": "Neural Ned (Holds Grudges)"}
+
+
 class DQNAgent:
     """Deep Q-Network (Mnih et al., 2015) with optional Double DQN and PER.
 
@@ -230,6 +235,7 @@ class DQNAgent:
         self.n_actions = n_actions
         self.config = config if config is not None else DQNConfig()
         self.name = "dqn_per" if self.config.prioritized else "dqn"
+        self.nickname = DQN_NICKNAMES[self.name]
         self.rng = np.random.default_rng(seed)
         if seed is not None:
             torch.manual_seed(seed)

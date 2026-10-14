@@ -336,10 +336,23 @@ class Trainer:
         self._append_logs(self.history, self.mistakes)
 
 
+def _safe_checkpoint_types() -> list:
+    """The only non-PyTorch types a MIND checkpoint contains (numpy arrays)."""
+    try:
+        from numpy._core.multiarray import _reconstruct  # numpy 2.x
+    except ImportError:  # pragma: no cover - numpy 1.x
+        from numpy.core.multiarray import _reconstruct  # type: ignore
+    dtypes = [type(np.dtype(t)) for t in ("float32", "float64", "int64", "int32", "int8",
+                                          "uint32", "uint64", "bool")]
+    return [np.ndarray, np.dtype, _reconstruct] + dtypes
+
+
 def _read_checkpoint(path: PathLike) -> dict:
-    # weights_only=False because checkpoints hold numpy arrays and RNG states.
-    # Only load checkpoints you created: unpickling can run arbitrary code.
-    return torch.load(path, map_location="cpu", weights_only=False)
+    # weights_only=True refuses to unpickle arbitrary objects, so a malicious
+    # uploaded file cannot run code; only plain containers, tensors and the
+    # numpy array types listed above are accepted.
+    with torch.serialization.safe_globals(_safe_checkpoint_types()):
+        return torch.load(path, map_location="cpu", weights_only=True)
 
 
 def load_agent(path: PathLike):
@@ -471,13 +484,19 @@ def main(argv: Optional[List[str]] = None) -> None:
                              checkpoint_every=args.checkpoint_every)
         trainer = Trainer(config, args.run_dir)
 
+    from src import fun  # imported here: src.fun depends on this module
+
+    print(f"Agent: {trainer.agent.nickname} ({trainer.config.agent}). "
+          f"{fun.TAGLINES[trainer.config.agent]}")
+
     def progress(row: dict) -> None:
         if (row["episode"] + 1) % 50 == 0:
             recent = trainer.history[-50:]
-            print(f"episode {row['episode'] + 1:>5}  "
-                  f"success {np.mean([r['success'] for r in recent]):.2f}  "
-                  f"mistakes {np.mean([r['mistakes'] for r in recent]):6.1f}  "
-                  f"epsilon {row['epsilon']:.2f}", flush=True)
+            success = float(np.mean([r["success"] for r in recent]))
+            mistakes = float(np.mean([r["mistakes"] for r in recent]))
+            print(f"episode {row['episode'] + 1:>5}  success {success:.2f}  "
+                  f"mistakes {mistakes:6.1f}  epsilon {row['epsilon']:.2f}  "
+                  f"| {fun.progress_quip(success, mistakes, row['episode'])}", flush=True)
 
     trainer.train(callback=progress)
     if trainer.history:
@@ -490,6 +509,12 @@ def main(argv: Optional[List[str]] = None) -> None:
         print("Most repeated mistakes in the last 50 episodes:")
         for h in mistake_hotspots(trainer.mistakes, top=5, episodes=last) or [{"event": "none"}]:
             print(f"  {h['event']:<10} at {h.get('pos', '-')}: {h.get('count', 0)}")
+        print("\n" + fun.format_hall_of_shame(fun.hall_of_shame(trainer.mistakes, top=3)))
+        earned = fun.achievements(trainer.history)
+        print(f"\nAchievements unlocked: {len(earned)}/{len(fun.ACHIEVEMENTS)}")
+        for a in earned:
+            print(f"  [episode {a['episode']:>4}] {a['title']}")
+        print(f"\nLast episode: {fun.episode_line(trainer.history[-1])}")
 
 
 if __name__ == "__main__":

@@ -282,3 +282,17 @@ def test_path_efficiency_never_rewards_hazard_shortcuts():
     assert shortcut["success"] and shortcut["hazards"] == 1
     assert shortcut["steps"] == 4 < shortcut["optimal_length"] == 8
     assert shortcut["path_efficiency"] == 0.0
+
+
+def test_checkpoint_loading_refuses_arbitrary_objects(tmp_path):
+    import pickle
+
+    class Evil:
+        def __reduce__(self):
+            return (print, ("this must never run",))
+
+    path = tmp_path / "evil.pt"
+    import torch
+    torch.save({"agent": Evil()}, path)
+    with pytest.raises(pickle.UnpicklingError):
+        load_agent(path)
