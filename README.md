@@ -1,6 +1,11 @@
 # MIND: an AI that learns from its own mistakes
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/anusidhu9/ai-that-learns-from-its-mistakes/blob/main/MIND_Colab.ipynb)
+[![Open in Hugging Face Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/anusidhu/ai-that-learns-from-its-own-mistakes)
+
+**Live demo:** https://huggingface.co/spaces/anusidhu/ai-that-learns-from-its-own-mistakes
+
+> The hosted demo is currently **paused** while its Hugging Face hosting quota is sorted out. Until it is back, run the same dashboard yourself in one click with the **Open in Colab** badge (*Runtime → Run all*; the last cell prints a public link).
 
 Reinforcement-learning agents explore grid worlds, get **rewarded** for reaching the goal and **penalised** for mistakes (hitting walls, stepping on hazards, revisiting cells, running out of time), and are then tested to see whether they actually got better. Everything runs on a free CPU: Google Colab or a laptop.
 
