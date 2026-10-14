@@ -411,3 +411,53 @@ def frame_figure(env: GridWorld, frames: List[dict], index: int,
         ax_q.set_xlim(min(q.min(), 0) - 0.35 * span, max(q.max(), 0) + 0.35 * span)
         _title(ax_q, "Q-values here (dark = chosen)")
     return fig
+
+
+def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int = 0) -> list:
+    """Regenerate every figure used in README.md and REPORT.md.
+
+    Multi-seed charts come from the saved results; the single-run charts
+    (heatmap, reward breakdown, replay) come from a fresh, seeded 400-episode
+    tabular Q run on the fixed maze, so they are reproducible.
+    """
+    from pathlib import Path
+
+    from src.evaluation import load_experiment
+    from src.training import TrainConfig, Trainer
+
+    results_dir, out_dir = Path(results_dir), Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    saved = []
+
+    def save(fig: Figure, name: str) -> None:
+        path = out_dir / name
+        fig.savefig(path, dpi=110)
+        saved.append(path)
+
+    fixed = load_experiment(results_dir / "fixed_maze")
+    save(experiment_curves_figure(fixed["curves"], "success"), "fixed_maze_success.png")
+    save(experiment_curves_figure(fixed["curves"], "mistakes"), "fixed_maze_mistakes.png")
+    terminal = load_experiment(results_dir / "terminal_hazards")
+    save(experiment_curves_figure(terminal["curves"], "success"), "terminal_hazards_success.png")
+    save(experiment_curves_figure(terminal["curves"], "mistakes"), "terminal_hazards_mistakes.png")
+    save(experiment_bars_figure(load_experiment(results_dir / "hazard_maze")["summary"],
+                                "hazards"), "hazard_maze_hazards.png")
+    save(experiment_bars_figure(load_experiment(results_dir / "generalization")["summary"],
+                                "success"), "generalization_success.png")
+
+    trainer = Trainer(TrainConfig(env_preset="maze", agent="tabular_q", episodes=400, seed=seed,
+                                  agent_kwargs={"epsilon": {"decay_episodes": 300}}))
+    trainer.train()
+    h, env = trainer.history, trainer.env
+    save(learning_curves_figure({"tabular_q": h}), "single_run_curves.png")
+    save(mistake_heatmap_figure(env.grid, trainer.mistakes, range(0, 50), range(350, 400),
+                                start=env.start), "mistake_heatmap.png")
+    save(reward_breakdown_figure(h), "reward_breakdown.png")
+    frames = record_episode(env, trainer.agent)
+    save(frame_figure(env, frames, 5, AGENT_COLORS["tabular_q"]), "replay_frame.png")
+    return saved
+
+
+if __name__ == "__main__":
+    for p in make_report_figures():
+        print("wrote", p)
