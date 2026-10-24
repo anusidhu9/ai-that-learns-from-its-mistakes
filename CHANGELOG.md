@@ -2,6 +2,14 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Parallel runs on Linux
+
+**Fixed**
+- `--workers N` now starts its worker processes with "spawn" instead of Linux's default "fork". The parallel-workers test hung on GitHub's Linux runners until the 20-minute job limit, most likely because forking after PyTorch has started its thread pool can deadlock; `--workers` could have hung the same way in Colab. Windows always spawns, so results are unchanged.
+
+**Changed**
+- The GitHub workflow runs pytest with a 5-minute per-test limit (`pytest-timeout`), so a hanging test fails quickly and names itself.
+
 ## Mistake-aware replay (Stage G)
 
 **Added**

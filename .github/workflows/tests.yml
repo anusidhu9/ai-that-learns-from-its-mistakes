@@ -39,13 +39,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
+          pip install pytest-timeout
 
+      # --timeout: a test that hangs fails after 5 minutes and names itself,
+      # instead of the whole job silently hitting its 20-minute limit.
       - name: Run tests
         env:
           MPLBACKEND: Agg
         run: |
           if [ "${{ inputs.include_slow }}" = "true" ]; then
-            python -m pytest -q
+            python -m pytest -q --timeout=300
           else
-            python -m pytest -q -m "not slow"
+            python -m pytest -q -m "not slow" --timeout=300
           fi

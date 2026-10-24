@@ -20,6 +20,7 @@ import csv
 import itertools
 import json
 import math
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -359,7 +360,10 @@ def run_experiment(exp: Experiment, root: PathLike = "runs/experiments",
     (exp_dir / "experiment.json").write_text(json.dumps(asdict(exp), indent=2))
     log(f"Experiment {exp.name}: {exp.description}")
     if workers > 1:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
+        # Fresh worker processes ("spawn"), not fork: forking after PyTorch has
+        # started its thread pool can deadlock on Linux. Windows always spawns.
+        spawn = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=workers, mp_context=spawn) as pool:
             jobs = {pool.submit(run_single, exp, agent, seed, exp_dir, _quiet): (agent, seed)
                     for agent in exp.agents for seed in exp.seeds}
             for job, (agent, seed) in jobs.items():
