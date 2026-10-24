@@ -18,6 +18,9 @@ DQN = dict(agent="dqn", episodes=16, seed=1, checkpoint_every=4,
            env_overrides={"max_steps": 40},
            agent_kwargs={"hidden": [32], "learning_starts": 50, "buffer_size": 2000,
                          "batch_size": 16, "epsilon": {"decay_episodes": 10}})
+DQN_PER_MISTAKE = {**DQN, "agent": "dqn_per_mistake",
+                   "agent_kwargs": {**DQN["agent_kwargs"], "mistake_capacity": 300,
+                                    "mistake_events": ["collision", "hazard"]}}
 
 
 def read(path):
@@ -119,7 +122,8 @@ def test_in_memory_trainer_writes_nothing(tmp_path, monkeypatch):
 
 # -- checkpoints and exact resumption -------------------------------------------------------
 
-@pytest.mark.parametrize("cfg", [TABULAR, DQN], ids=["tabular", "dqn"])
+@pytest.mark.parametrize("cfg", [TABULAR, DQN, DQN_PER_MISTAKE],
+                         ids=["tabular", "dqn", "dqn_per_mistake"])
 def test_resumed_run_matches_uninterrupted_run(tmp_path, cfg):
     full = tmp_path / "full"
     Trainer(TrainConfig(**cfg), full).train()

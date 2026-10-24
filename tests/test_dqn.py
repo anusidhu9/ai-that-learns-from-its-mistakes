@@ -5,9 +5,9 @@ import pytest
 import torch
 
 from src.agents import (DQNAgent, DQNConfig, EpsilonSchedule, QNetwork, RandomAgent,
-                        TabularQAgent, make_agent)
+                        TabularQAgent, is_mistake, make_agent)
 from src.envs import EnvConfig, GridWorld, make_env
-from src.replay import PrioritizedReplayBuffer, ReplayBuffer
+from src.replay import MistakeReplayBuffer, PrioritizedReplayBuffer, ReplayBuffer
 from src.training import run_episode, train_agent
 
 CORRIDOR = """
@@ -36,6 +36,12 @@ def test_make_agent_builds_every_variant():
     assert dqn.name == "dqn" and isinstance(dqn.buffer, ReplayBuffer)
     assert not isinstance(dqn.buffer, PrioritizedReplayBuffer)
     assert per.name == "dqn_per" and isinstance(per.buffer, PrioritizedReplayBuffer)
+    mis = make_agent("dqn_mistake", 8, 4, hidden=(16,))
+    both = make_agent("dqn_per_mistake", 8, 4, hidden=(16,))
+    assert mis.name == "dqn_mistake" and isinstance(mis.buffer, MistakeReplayBuffer)
+    assert not isinstance(mis.buffer.main, PrioritizedReplayBuffer)
+    assert both.name == "dqn_per_mistake" and isinstance(both.buffer.main, PrioritizedReplayBuffer)
+    assert not isinstance(dqn.buffer, MistakeReplayBuffer)  # off by default
     with pytest.raises(ValueError):
         make_agent("ppo", 8, 4)
 
@@ -144,3 +150,127 @@ def test_dqn_learns_fixed_maze_and_reduces_mistakes():
     assert late < 0.2 * early, f"mistakes early={early:.1f} late={late:.1f}"
     result = run_episode(env, agent, train=False, greedy=True)
     assert result["success"] and result["steps"] == result["optimal_length"]
+
+
+# ---------------------------------------------------------------------------
+# Mistake-aware replay
+# ---------------------------------------------------------------------------
+
+HAZARD_ROOM = """
+#####
+#SH.#
+#..G#
+#####
+"""
+
+
+def test_is_mistake_reads_events_not_rewards():
+    assert is_mistake({"events": ["collision"]})
+    assert is_mistake({"events": ["hazard"]})
+    assert is_mistake({"events": ["collision", "timeout"]})
+    for events in (["revisit"], ["timeout"], ["goal"], [], ["revisit", "timeout"]):
+        assert not is_mistake({"events": events})
+    assert not is_mistake(None) and not is_mistake({})
+    assert is_mistake({"events": ["revisit"]}, events=("revisit",))  # configurable
+
+
+def test_classification_of_real_environment_steps():
+    env = GridWorld.from_ascii(HAZARD_ROOM, EnvConfig(hazard_terminal=False, max_steps=4))
+    up, right, down, left = range(4)
+    env.reset(seed=0)
+    steps = [env.step(a) for a in (up, right, left, right)]  # wall, hazard, back, hazard again
+    flags = [is_mistake(info) for *_, info in steps]
+    assert flags == [True, True, False, True]
+    env.reset(seed=0)
+    steps = [env.step(a) for a in (down, up, down, up)]  # move, revisit, revisit, revisit+timeout
+    rewards = [r for _, r, *_ in steps]
+    assert [is_mistake(info) for *_, info in steps] == [False] * 4
+    # revisit + timeout costs more than a wall bump, yet it is not a mistake:
+    # classification never looks at the reward
+    assert rewards[3] < env.config.rewards.step + env.config.rewards.collision
+
+
+def test_agent_reserves_only_collisions_and_hazards():
+    env = GridWorld.from_ascii(HAZARD_ROOM, EnvConfig(hazard_terminal=False, max_steps=30))
+    agent = make_agent("dqn_mistake", env.obs_size, env.n_actions, seed=0, hidden=(16,),
+                       learning_starts=10_000)
+    history = train_agent(env, agent, 20, seed=0)
+    expected = sum(h["collisions"] + h["hazards"] for h in history)
+    assert expected > 0
+    assert agent.buffer.mistakes_seen == len(agent.buffer.reserve) == expected
+    assert len(agent.buffer) == sum(h["steps"] for h in history)  # main keeps everything
+    # every reserved transition is a wall bump (obs unchanged) or a hazard step
+    r, n = agent.buffer.reserve, len(agent.buffer.reserve)
+    bumped = (r.obs[:n] == r.next_obs[:n]).all(axis=1)
+    rw = env.config.rewards
+    hazard_rewards = np.array([rw.step + rw.hazard, rw.step + rw.hazard + rw.timeout])
+    hazard = np.isclose(r.rewards[:n, None], hazard_rewards, atol=1e-6).any(axis=1)
+    assert (bumped | hazard).all() and hazard.any() and bumped.any()
+
+
+def test_update_without_info_never_reserves():
+    agent = DQNAgent(3, 2, tiny_config(mistake_replay=True), seed=0)
+    obs = np.zeros(3, dtype=np.float32)
+    for _ in range(20):
+        agent.update(obs, 0, -5.0, obs, False, False)  # positional call, as before
+    assert len(agent.buffer.reserve) == 0 and len(agent.buffer) == 20
+
+
+@pytest.mark.parametrize("name", ["dqn_mistake", "dqn_per_mistake"])
+def test_mistake_checkpoint_round_trip(name):
+    env = make_env("maze")
+    agent = make_agent(name, env.obs_size, env.n_actions, seed=0, hidden=(32,),
+                       learning_starts=20, mistake_capacity=50)
+    train_agent(env, agent, 3, seed=0)
+    blob = pickle.dumps(agent.state_dict(include_buffer=True))
+    restored = make_agent(name, env.obs_size, env.n_actions, seed=1, hidden=(32,),
+                          mistake_capacity=50)
+    restored.load_state_dict(pickle.loads(blob))
+    assert len(restored.buffer.reserve) == len(agent.buffer.reserve) > 0
+    assert restored.buffer.mistakes_seen == agent.buffer.mistakes_seen
+    assert restored.config.mistake_events == ("collision", "hazard")
+    obs, _ = env.reset()
+    np.testing.assert_allclose(restored.q_values(obs), agent.q_values(obs))
+
+
+def test_checkpoint_rejects_mismatched_mistake_replay():
+    plain = make_agent("dqn", 8, 4, hidden=(16,)).state_dict()
+    with pytest.raises(ValueError):
+        make_agent("dqn_mistake", 8, 4, hidden=(16,)).load_state_dict(plain)
+    with pytest.raises(ValueError):
+        make_agent("dqn", 8, 4, hidden=(16,)).load_state_dict(
+            make_agent("dqn_mistake", 8, 4, hidden=(16,)).state_dict())
+
+
+def test_old_checkpoints_without_mistake_fields_still_load():
+    state = make_agent("dqn", 8, 4, hidden=(16,)).state_dict()
+    for key in ("mistake_replay", "mistake_fraction", "mistake_capacity", "mistake_events"):
+        del state["config"][key]
+    agent = make_agent("dqn", 8, 4, hidden=(16,))
+    agent.load_state_dict(state)
+    assert not agent.config.mistake_replay
+
+
+@pytest.mark.parametrize("name", ["dqn_mistake", "dqn_per_mistake"])
+def test_mistake_dqn_solves_corridor(name):
+    env = GridWorld.from_ascii(CORRIDOR, EnvConfig(max_steps=30))
+    agent = make_agent(name, env.obs_size, env.n_actions, seed=0, hidden=(64,),
+                       learning_starts=64, epsilon=EpsilonSchedule(decay_episodes=40))
+    train_agent(env, agent, 80, seed=0)
+    assert len(agent.buffer.reserve) > 0
+    result = run_episode(env, agent, train=False, greedy=True)
+    assert result["success"] and result["steps"] == 4
+
+
+def test_long_memory_reserve_outlives_a_small_main_buffer():
+    env = make_env("maze_hazards", obs_mode="local", layout_pool=(0, 1, 2))
+    agent = make_agent("dqn_mistake", env.obs_size, env.n_actions, seed=0, hidden=(16,),
+                       buffer_size=300, mistake_capacity=300, learning_starts=100)
+    history = train_agent(env, agent, 25, seed=0)
+    d = agent.buffer.diagnostics()
+    assert d["transitions_added"] == agent.env_steps == sum(h["steps"] for h in history)
+    assert d["main_size"] == 300 and d["main_overwritten"] > 0   # old experience evicted
+    assert d["reserve_size"] <= 300
+    assert d["mistakes_seen"] == sum(h["collisions"] + h["hazards"] for h in history)
+    assert d["reserve_only"] > 0          # some mistakes survive only in the reserve
+    assert d["reserve_span"] > d["main_size"]

@@ -29,6 +29,8 @@ TAGLINES: Dict[str, str] = {
     "tabular_q": "Remembers every square it has ever been embarrassed on.",
     "dqn": "A neural network that learned walls are load-bearing.",
     "dqn_per": "Replays its most painful memories first. Relatable.",
+    "dqn_mistake": "Writes down every wall it walked into, then rereads the list.",
+    "dqn_per_mistake": "Keeps a diary of its mistakes and rereads the worst pages first.",
 }
 
 _EVENT_LINES: Dict[str, Sequence[str]] = {

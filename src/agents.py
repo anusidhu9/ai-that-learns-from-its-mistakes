@@ -4,13 +4,17 @@ Every agent implements the same interface so training and evaluation code
 never needs to know which algorithm it is running:
 
     action = agent.act(obs, greedy=False)      # greedy=True disables exploration
-    stats  = agent.update(obs, action, reward, next_obs, terminated, truncated)
+    stats  = agent.update(obs, action, reward, next_obs, terminated, truncated,
+                          info=info)            # info (optional): env.step's info dict
     agent.end_episode()                         # advance the exploration schedule
     state  = agent.state_dict(); agent.load_state_dict(state)
 
 `terminated` means a true terminal state (goal, terminal hazard): its future
 value is zero. `truncated` means the step limit cut the episode short: the
 state still has future value, so we keep bootstrapping from it.
+
+`info` is the environment's info dict for the step. Only mistake-aware replay
+reads it (for info["events"]); every agent works without it.
 """
 from __future__ import annotations
 
@@ -22,7 +26,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.replay import PrioritizedReplayBuffer, ReplayBuffer
+from src.replay import MistakeReplayBuffer, PrioritizedReplayBuffer, ReplayBuffer
 
 
 @dataclass
@@ -50,6 +54,21 @@ def greedy_action(q_values: np.ndarray, rng: np.random.Generator) -> int:
     return int(best[rng.integers(len(best))])
 
 
+MISTAKE_REPLAY_EVENTS = ("collision", "hazard")
+
+
+def is_mistake(info: Optional[dict], events: Tuple[str, ...] = MISTAKE_REPLAY_EVENTS) -> bool:
+    """True if the environment reported one of `events` on this step.
+
+    Read from info["events"], never from the reward: a large negative reward can
+    come from the step cost plus a timeout or a revisit, and rewards are
+    configurable. Without info nothing counts as a mistake.
+    """
+    if not info:
+        return False
+    return any(e in events for e in info.get("events", ()))
+
+
 class RandomAgent:
     """Baseline: uniform random actions, never learns."""
 
@@ -68,7 +87,8 @@ class RandomAgent:
     def act(self, obs: np.ndarray, greedy: bool = False) -> int:
         return int(self.rng.integers(self.n_actions))
 
-    def update(self, obs, action, reward, next_obs, terminated, truncated) -> Optional[dict]:
+    def update(self, obs, action, reward, next_obs, terminated, truncated,
+               info: Optional[dict] = None) -> Optional[dict]:
         return None
 
     def end_episode(self) -> None:
@@ -130,7 +150,8 @@ class TabularQAgent:
             return int(self.rng.integers(self.n_actions))
         return greedy_action(self.q_values(obs), self.rng)
 
-    def update(self, obs, action, reward, next_obs, terminated, truncated) -> dict:
+    def update(self, obs, action, reward, next_obs, terminated, truncated,
+               info: Optional[dict] = None) -> dict:
         k = self.key(obs)
         row = self.q.setdefault(k, np.zeros(self.n_actions))
         if terminated:
@@ -191,6 +212,10 @@ class DQNConfig:
     per_beta_steps: int = 20_000    # gradient steps to anneal beta to 1
     grad_clip: float = 10.0
     epsilon: EpsilonSchedule = field(default_factory=EpsilonSchedule)
+    mistake_replay: bool = False    # keep collisions/hazards in a reserve and replay them
+    mistake_fraction: float = 0.25  # share of each batch drawn from the reserve
+    mistake_capacity: int = 5_000   # reserve size (circular)
+    mistake_events: Tuple[str, ...] = MISTAKE_REPLAY_EVENTS
 
 
 class QNetwork(nn.Module):
@@ -209,7 +234,15 @@ class QNetwork(nn.Module):
         return self.net(x)
 
 
-DQN_NICKNAMES = {"dqn": "Neural Ned", "dqn_per": "Neural Ned (Holds Grudges)"}
+DQN_NICKNAMES = {"dqn": "Neural Ned", "dqn_per": "Neural Ned (Holds Grudges)",
+                 "dqn_mistake": "Neural Ned (Keeps a Diary)",
+                 "dqn_per_mistake": "Neural Ned (Holds Grudges, Keeps a Diary)"}
+
+
+def dqn_name(config: DQNConfig) -> str:
+    """'dqn', 'dqn_per', 'dqn_mistake' or 'dqn_per_mistake'."""
+    return ("dqn_per" if config.prioritized else "dqn") + \
+        ("_mistake" if config.mistake_replay else "")
 
 
 class DQNAgent:
@@ -227,6 +260,11 @@ class DQNAgent:
 
     theta_target is a periodically copied snapshot of theta, which keeps the
     regression target stable. w_i are importance weights (all 1 without PER).
+
+    With mistake_replay, transitions whose step reported a collision or hazard
+    are also kept in a reserve, and mistake_fraction of every batch is drawn
+    from it (see MistakeReplayBuffer). Off by default; when off, the agent is
+    exactly the original DQN.
     """
 
     def __init__(self, obs_size: int, n_actions: int, config: Optional[DQNConfig] = None,
@@ -234,7 +272,7 @@ class DQNAgent:
         self.obs_size = obs_size
         self.n_actions = n_actions
         self.config = config if config is not None else DQNConfig()
-        self.name = "dqn_per" if self.config.prioritized else "dqn"
+        self.name = dqn_name(self.config)
         self.nickname = DQN_NICKNAMES[self.name]
         self.rng = np.random.default_rng(seed)
         if seed is not None:
@@ -251,6 +289,9 @@ class DQNAgent:
                                                   alpha=cfg.per_alpha, seed=seed)
         else:
             self.buffer = ReplayBuffer(cfg.buffer_size, obs_size, seed=seed)
+        if cfg.mistake_replay:
+            self.buffer = MistakeReplayBuffer(self.buffer, cfg.mistake_capacity,
+                                              cfg.mistake_fraction, seed=seed)
 
         self.episodes = 0
         self.env_steps = 0
@@ -276,9 +317,14 @@ class DQNAgent:
             return int(self.rng.integers(self.n_actions))
         return greedy_action(self.q_values(obs), self.rng)
 
-    def update(self, obs, action, reward, next_obs, terminated, truncated) -> Optional[dict]:
+    def update(self, obs, action, reward, next_obs, terminated, truncated,
+               info: Optional[dict] = None) -> Optional[dict]:
         """Store the transition and, when due, take one gradient step."""
-        self.buffer.add(obs, action, reward, next_obs, terminated)
+        if self.config.mistake_replay:
+            self.buffer.add(obs, action, reward, next_obs, terminated,
+                            mistake=is_mistake(info, self.config.mistake_events))
+        else:
+            self.buffer.add(obs, action, reward, next_obs, terminated)
         self.env_steps += 1
         cfg = self.config
         if len(self.buffer) < cfg.learning_starts or self.env_steps % cfg.train_freq != 0:
@@ -344,7 +390,11 @@ class DQNAgent:
         cfg = dict(state["config"])
         cfg["hidden"] = tuple(cfg["hidden"])
         cfg["epsilon"] = EpsilonSchedule(**cfg["epsilon"])
-        if cfg["hidden"] != tuple(self.config.hidden) or cfg["prioritized"] != self.config.prioritized:
+        if "mistake_events" in cfg:
+            cfg["mistake_events"] = tuple(cfg["mistake_events"])
+        if (cfg["hidden"] != tuple(self.config.hidden)
+                or cfg["prioritized"] != self.config.prioritized
+                or cfg.get("mistake_replay", False) != self.config.mistake_replay):
             raise ValueError("checkpoint network size or replay type differs from this agent")
         self.config = DQNConfig(**cfg)
         self.online.load_state_dict(state["online"])
@@ -358,15 +408,19 @@ class DQNAgent:
 
 
 def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = None, **kwargs):
-    """Build an agent by name: 'random', 'tabular_q', 'dqn', or 'dqn_per'.
+    """Build an agent by name: 'random', 'tabular_q', or a DQN variant.
 
-    kwargs go to TabularQAgent, or become DQNConfig fields for the DQN variants.
+    DQN variants: 'dqn', 'dqn_per' (prioritized replay), 'dqn_mistake'
+    (mistake-aware replay) and 'dqn_per_mistake' (both). kwargs go to
+    TabularQAgent, or become DQNConfig fields for the DQN variants.
     """
     if name == "random":
         return RandomAgent(n_actions, seed=seed)
     if name == "tabular_q":
         return TabularQAgent(n_actions, seed=seed, **kwargs)
-    if name in ("dqn", "dqn_per"):
-        kwargs["prioritized"] = name == "dqn_per"
+    if name in DQN_NICKNAMES:
+        kwargs["prioritized"] = name.startswith("dqn_per")
+        kwargs["mistake_replay"] = name.endswith("_mistake")
         return DQNAgent(obs_size, n_actions, DQNConfig(**kwargs), seed=seed)
-    raise ValueError(f"unknown agent {name!r}; choose random, tabular_q, dqn or dqn_per")
+    raise ValueError(f"unknown agent {name!r}; choose random, tabular_q or one of "
+                     f"{', '.join(DQN_NICKNAMES)}")

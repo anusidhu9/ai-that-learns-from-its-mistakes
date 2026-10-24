@@ -1,0 +1,30 @@
+{
+  "name": "mistakes_hazard_maze",
+  "env_preset": "maze_hazards",
+  "env_overrides": {},
+  "agents": [
+    "dqn",
+    "dqn_per",
+    "dqn_mistake",
+    "dqn_per_mistake"
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "episodes": 400,
+  "decay_episodes": 300,
+  "eval_every": 50,
+  "eval_episodes": 10,
+  "unseen_layouts": null,
+  "agent_kwargs": {},
+  "description": "hazard_maze (same maze, seeds and schedule) comparing DQN, prioritized replay and mistake-aware replay (25% of each batch from a reserve of collisions and hazards)."
+}

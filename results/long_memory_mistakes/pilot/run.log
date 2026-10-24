@@ -1,0 +1,32 @@
+long_memory_pilot (2026-10-23): one dqn_5k run, seed 900, layouts 5000-5049 / 6000-6049, 137 s.
+Used only to measure run time and confirm that the main buffer overwrites old transitions.
+Stop rule (final training success < 0.2) not triggered: training success 1.00. Console output follows unchanged.
+
+Experiment long_memory_pilot: Feasibility pilot for long_memory_mistakes: baseline arm only, on its own seed and layouts, to measure run time and check that the buffer overwrites old transitions. Never used to choose settings for the variant.
+  dqn_5k     seed 900  episode   500  greedy success 0.70  mistakes 28.4
+  dqn_5k     seed 900  episode  1000  greedy success 0.78  mistakes 21.3
+  dqn_5k     seed 900  episode  1500  greedy success 0.94  mistakes 5.7
+  dqn_5k     seed 900  episode  2000  greedy success 0.94  mistakes 5.9
+  dqn_5k     seed 900  episode  2500  greedy success 0.92  mistakes 7.6
+  dqn_5k     seed 900  episode  3000  greedy success 1.00  mistakes 0.0
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent           split    seeds             success     path_efficiency               steps            mistakes             hazards
+----------------------------------------------------------------------------------------------------------------------------------
+dqn_5k          train        1                1.00                1.00               13.44                0.00                0.00
+dqn_5k          unseen       1                0.52                0.50               54.52               46.54                0.94
+
+Episode reward, steps to goal (successful episodes only) and mistake types:
+agent           split    seeds        total_reward       steps_to_goal         hazard_rate          collisions            revisits
+----------------------------------------------------------------------------------------------------------------------------------
+dqn_5k          train        1                0.87               13.44                0.00                0.00                0.00
+dqn_5k          unseen       1               -1.91               12.54                0.04               15.48               29.64
+
+Success-rate differences (permutation test):
+
+Other differences (permutation test):
+
+Replay buffer at the end of training (transitions; mean over seeds):
+  dqn_5k          added    106971  main overwrote    101971
+
+Files written to runs\experiments_long_memory\long_memory_pilot

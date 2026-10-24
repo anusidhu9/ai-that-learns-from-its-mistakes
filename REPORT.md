@@ -2,7 +2,7 @@
 
 ## 1. Summary
 
-This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
+This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, and DQN with an explicit memory of its mistakes was tested in two more, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
 
 Main findings:
 
@@ -11,6 +11,7 @@ Main findings:
 3. **DQN generalizes better to unseen mazes.** Trained on 50 mazes and tested on 50 it had never seen, DQN reached the goal 45% of the time against 34% for tabular Q-learning and 6% for random (10 seeds; DQN vs tabular p = 0.003, ahead in 9 of 10 seeds). DQN's successes on new mazes were near-shortest paths, while tabular Q's were mostly long wanders (path efficiency 0.45 vs 0.15, p < 0.001). On the training mazes the two were level.
 4. **DQN avoids hazards that tabular Q-learning walks through, but is less reliable.** With 10 seeds on the hazard maze, tabular Q-learning took a shortcut through a hazard in 9 runs and DQN in 1 (p = 0.002). One DQN run, however, solved the maze and then unlearned it before training ended, something no tabular run did.
 5. **Prioritized experience replay gave no measurable benefit** on these tasks; one of its five fixed-maze runs never solved its maze.
+6. **Replaying mistakes explicitly gave no measurable benefit either.** Keeping collision and hazard transitions in a reserve and drawing 25% of every batch from it did not improve DQN on the hazard maze (Section 6.6). It also did not help in a pre-registered study on held-out hazard mazes, where a small buffer forced the reserve to be the only memory of most past mistakes (0.30 vs 0.37 held-out success, p = 0.082; Section 6.7). A DQN given the same total memory for ordinary experience did best.
 
 ## 2. Question and approach
 
@@ -84,14 +85,16 @@ where θ⁻ is a target network copied from θ every 100 gradient steps. Experie
 
 DQN's `train_freq` and `target_update` were tuned on the fixed maze during development (Section 8). No other tuning was done.
 
+**DQN + mistake memory** (`dqn_mistake`; `dqn_per_mistake` combines it with PER). A step counts as a mistake when the environment reports a `collision` or `hazard` event for it. The label comes from the event, not the reward, because a revisit plus a timeout costs more than a wall bump and reward values are configurable. Every transition still goes into the normal buffer. Mistakes are also copied into a separate circular reserve of 5,000 transitions, and each batch of 64 takes `min(round(0.25 · 64), len(reserve))` transitions uniformly from the reserve and the rest from the normal buffer. This deliberately over-weights mistakes and is not corrected by importance weights; reserve samples get weight 1 and never change PER priorities. The fraction (0.25) and reserve size (5,000) were fixed before any experiment and not tuned. The option is off by default; with it off, DQN and DQN + PER reproduce their earlier results exactly (checked by training fingerprints and by rerunning `hazard_maze`).
+
 ## 5. Evaluation protocol
 
 - **Greedy evaluation.** Every reported result is measured with exploration switched off, using a separate environment and a separately seeded tie-breaking generator that is restored afterwards, so evaluation never changes training (tested).
 - **When.** Before training (episode 0), every 50 episodes (every 500 for generalization), and at the end.
 - **What.** On a fixed layout, 10 greedy episodes; with a layout pool, one episode on each of the 50 training layouts; for generalization, also one episode on each of 50 held-out layouts (seeds 1000–1049) never used in training.
-- **Metrics.** Success rate; path efficiency (optimal length ÷ steps, for successful episodes that touched no hazard, otherwise 0); steps; mistakes by type; total reward.
+- **Metrics.** Success rate; path efficiency (optimal length ÷ steps, for successful episodes that touched no hazard, otherwise 0); steps; mistakes by type; total reward. The two mistake-replay experiments also report steps to goal (mean steps of successful episodes only, so failures do not count as 100) and hazard rate (share of episodes that touched a hazard).
 - **Statistics.** Each seed contributes one value. Results are the mean across seeds ± the half-width of a 95% Student-t confidence interval. Two agents are compared with an exact two-sided permutation test on the per-seed values. With 10 seeds per agent the smallest attainable p-value is about 0.00001, with 5 seeds 2/252 ≈ 0.008, and with 3 seeds 0.10.
-- **Seeds.** 10 per agent for `hazard_maze` and `generalization` (both first run with fewer seeds, 5 and 3, then extended to settle open questions; Sections 6.2 and 6.5), 5 for the other fixed-layout experiments.
+- **Seeds.** 10 per agent for `hazard_maze` and `generalization` (both first run with fewer seeds, 5 and 3, then extended to settle open questions; Sections 6.2 and 6.5), 5 for the other fixed-layout experiments. `mistakes_hazard_maze` reuses `hazard_maze`'s seeds 0–9; `long_memory_mistakes` uses fresh seeds 100–109 and fresh layouts, fixed in a written protocol before it ran.
 
 ## 6. Results
 
@@ -198,6 +201,51 @@ The 3 original runs per agent were retrained from scratch and reproduced the ear
 
 A development check with the full-map observation showed tabular Q-learning near random on unseen layouts (6–10% success): every new layout produces observations the table has never seen.
 
+### 6.6 Mistake-aware replay on the hazard maze (`mistakes_hazard_maze`, 10 seeds)
+
+Same maze, seeds 0–9, budget and evaluation as `hazard_maze`, comparing DQN and DQN + PER with and without mistake-aware replay. Full analysis: [`results/mistakes_hazard_maze/ANALYSIS.md`](results/mistakes_hazard_maze/ANALYSIS.md).
+
+| Agent | Success | Episode reward | Steps to goal | Collisions | Seeds crossing a hazard |
+|---|---|---|---|---|---|
+| DQN | 0.90 ± 0.23 | 0.13 ± 1.46 | 17.3 ± 1.5 (9 seeds) | 9.1 ± 20.6 | 1 / 10 |
+| DQN + PER | 1.00 ± 0.00 | 0.69 ± 0.15 | 16.2 ± 2.1 | 0.0 | 3 / 10 |
+| DQN + mistakes | 0.80 ± 0.30 | −0.30 ± 1.69 | 17.3 ± 1.8 (8 seeds) | 10.0 ± 22.6 | 1 / 10 |
+| DQN + PER + mistakes | 1.00 ± 0.00 | 0.73 ± 0.13 | 16.8 ± 1.8 | 0.0 | 2 / 10 |
+
+- **No difference was significant** on any metric (all p ≥ 0.4). For success, DQN + mistakes − DQN = −0.10 (p = 1.000) and DQN + PER + mistakes − DQN + PER = 0.00 (p = 1.000).
+- DQN + mistakes never solved the maze on seeds 5 (ended pushing into a wall) and 6 (ended walking in loops); plain DQN's seed 5 solved it and then unlearned it (Section 6.2).
+- `dqn` and `dqn_per` reproduced `hazard_maze` exactly on every seed and metric.
+- **This experiment did not test long-term memory.** Runs collected 14,500–22,600 transitions, against a 20,000-transition buffer. In 13 of the 20 mistake-replay runs the buffer never overwrote anything, and in 5 more it overwrote at most 2,624 transitions. The reserve therefore mostly over-weighted mistakes the normal buffer still held. That motivated Section 6.7.
+
+### 6.7 Long-term mistake memory on held-out mazes (`long_memory_mistakes`, 10 seeds, pre-registered)
+
+**Question.** When the replay buffer is small enough to forget, does a separate long-term memory of mistakes help DQN on mazes it has never seen? The protocol ([`PROTOCOL.md`](results/long_memory_mistakes/PROTOCOL.md)) was written and approved before any run, including the claim rule. Full analysis: [`ANALYSIS.md`](results/long_memory_mistakes/ANALYSIS.md).
+
+**Design.**
+- **Arms.** Three DQN arms identical except for replay memory: `dqn_5k` (5,000-transition buffer), `dqn_mistake_5k` (the same plus a 5,000-mistake reserve, 25% of each batch) and `dqn_10k` (10,000-transition buffer, matching the variant's total memory).
+- **Task.** `maze_hazards` mazes with the 5×5 local view: 50 training layouts (3000–3049) and 50 held-out layouts (4000–4049), checked to share no maze.
+- **Seeds and budget.** Fresh seeds 100–109; 3,000 episodes per run.
+- **Primary endpoint.** Held-out success, `dqn_mistake_5k` − `dqn_5k`, permutation test at α = 0.05.
+- **Pilot.** One baseline-only run on its own seed and layouts confirmed the task was learnable and the buffer forgot. No setting was chosen from it.
+
+**Forgetting happened.** In every run the main buffer overwrote between 89,746 and 116,498 transitions. In every variant run 82–98% of the reserved mistakes were no longer in the main buffer, and the reserve reached back 40,000–45,000 transitions against the main buffer's 5,000.
+
+| Arm | Success, held-out | Success, training | Reward, held-out | Hazard rate, held-out | Collisions, held-out | Revisits, held-out |
+|---|---|---|---|---|---|---|
+| DQN (5k) | 0.37 ± 0.04 | 0.91 ± 0.05 | −2.26 ± 0.17 | 0.04 ± 0.04 | 23.2 ± 4.0 | 35.9 ± 6.3 |
+| DQN + mistake memory | 0.30 ± 0.08 | 0.84 ± 0.10 | −2.58 ± 0.58 | 0.05 ± 0.03 | 17.8 ± 5.5 | 48.1 ± 5.4 |
+| DQN (10k) | **0.42 ± 0.05** | **0.94 ± 0.03** | −2.10 ± 0.22 | 0.05 ± 0.03 | 24.2 ± 3.3 | 30.0 ± 5.9 |
+
+![Success on training and held-out mazes](docs/figures/long_memory_success.png)
+
+- **Primary result: no evidence of benefit.** Mistake memory − DQN (5k) on held-out success: −0.08, p = 0.082. It was behind in 9 of 10 seeds, but by the pre-registered rule a non-significant difference is "no evidence", not "worse".
+- **The memory-matched control did best** (exploratory). DQN (10k) beat mistake memory on held-out success (+0.13, p = 0.009) and training success (+0.10, p = 0.020), and was ahead of DQN (5k) by +0.05 (p = 0.118). On this task, spending the extra memory on ordinary experience was better than spending it on mistakes.
+- **Fewer wall bumps, more loops.** Mistake memory reduced held-out collisions (−5.4 against DQN 5k, p = 0.087) but increased revisits by 12 per episode.
+- Steps to goal (about 12 in every arm) and hazard rate (0.04–0.05) did not differ.
+- Mistake memory learned more slowly. At episode 500 its greedy training-maze success was 0.40, against 0.56 for DQN (5k) and 0.68 for DQN (10k), and it was the lowest arm at every later evaluation point.
+
+![Greedy success during training](docs/figures/long_memory_curves.png)
+
 ## 7. Discussion
 
 **Did the agents learn from their mistakes?** Yes, on every fixed layout, and the logs show how. Mistakes concentrated in specific places early in training (the corridor below the start), the corresponding penalties dominated the reward, and both disappeared as Q-values for the offending actions fell. The early-versus-late comparison, the mistake hotspots and the reward breakdown all point the same way, and greedy evaluation confirms it with exploration off.
@@ -212,6 +260,8 @@ A development check with the full-map observation showed tabular Q-learning near
 **Tabular Q-learning versus DQN.** Each has a clear strength. Tabular Q-learning is faster (greedy-perfect within 50 episodes on the fixed maze), far cheaper per step, and completely reliable on fixed layouts (25 of 25 runs reached the goal). DQN finds the safe route on the hazard maze where tabular Q-learning settles on a hazard shortcut (Section 6.2), and it generalises better to unseen mazes, with more successes and far more direct paths (Section 6.5). But DQN can unlearn a solved task late in training. Tabular Q-learning also benefits from optimistic initialisation, which DQN lacks, and that difference explains the terminal-hazard result.
 
 **Prioritized replay.** On tasks this small, replaying surprising transitions more often gave no benefit, and one PER run converged to a stuck policy. A single failure in five seeds is not evidence that PER hurts.
+
+**Replaying mistakes explicitly.** Two forms of "learning from mistakes on purpose" were tested: over-weighting recent mistakes (Section 6.6) and remembering them after ordinary replay had forgotten them (Section 6.7). Neither helped. The second study was designed to be fair to the idea. It used held-out mazes, fresh seeds, a written protocol, a check that forgetting actually happened, and a control with the same total memory. A plausible explanation is in the numbers. Mistakes were already 27–29% of all transitions, so with a quarter of each batch drawn from the reserve, nearly half of every batch was mistakes. The network then spent its updates on what not to do (it hit fewer walls) at the expense of how to reach the goal (it looped more). This is the same lesson as the terminal-hazard result: penalised events are a proxy for failure, and optimising against the proxy is not the same as succeeding. The penalties already teach the agent about its mistakes through the TD error; replaying them more often did not add information.
 
 ## 8. Problems found and fixed during development
 
@@ -229,7 +279,7 @@ These are reported because each would have changed the conclusions.
 
 - **Small tasks.** 8×8 and 9×9 grids with 100-step episodes, chosen to fit a free CPU. The ranking of algorithms may change on larger problems.
 - **Few seeds.** Five per agent for three of the five experiments can show large effects only. Extending `hazard_maze` and `generalization` to 10 seeds turned two "not established" differences into established ones; the remaining open questions (PER, how often DQN collapses) might be settled the same way.
-- **Limited tuning.** One hyperparameter setting per algorithm. DQN's update frequency and target-update interval were chosen from four settings on the fixed maze; tabular Q-learning was not tuned at all.
+- **Limited tuning.** One hyperparameter setting per algorithm. DQN's update frequency and target-update interval were chosen from four settings on the fixed maze; tabular Q-learning was not tuned at all. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); a smaller share, or a task where mistakes are rare, might behave differently, but tuning it on the seeds already examined would mean tuning on the test set.
 - **Fixed training budgets.** Tabular Q-learning was still improving at the end of the generalization runs.
 - **Non-Markovian revisit penalty**, as described in Section 3.
 - **Statistics.** t-intervals on 5–10 bounded values are approximate; the charts clip them to the possible range.
@@ -241,18 +291,22 @@ Everything in this report can be regenerated from the repository:
 ```bash
 pip install -r requirements.txt
 python -m src.evaluation --experiment fixed_maze        # also: hazard_maze, terminal_hazards,
-                                                        #       open_hazards, generalization
+                                                        #       open_hazards, generalization,
+                                                        #       mistakes_hazard_maze
+python -m src.evaluation --experiment long_memory_pilot
+python -m src.evaluation --experiment long_memory_mistakes --workers 4
 python -m src.visualization                             # regenerates docs/figures from results/
-python -m pytest -q                                     # 154 tests
+python -m pytest -q                                     # 197 tests
 ```
 
-The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
+The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. The two mistake-replay experiments add `buffer_diagnostics.csv` (how much each replay buffer forgot) and `ANALYSIS.md`; `long_memory_mistakes` also has `PROTOCOL.md` and its pilot in `pilot/`. `--workers N` trains N runs at a time; runs are independent and seeded, so results are the same as with one worker (tested). Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
 
 Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.14.1 (CPU), NumPy 2.4.6, Matplotlib 3.11.2, pandas 3.0.6 and Gradio 6.30.0. Exact reproduction is guaranteed for the same software on the same machine. Other platforms should give statistically similar but not bit-identical numbers, because floating-point results can differ between builds.
 
 ## 11. Future work
 
 - More seeds (10–20) for the remaining open question about PER, and more runs to estimate how often DQN collapses.
+- Mistake memory on a task where mistakes are rare (where a reserve might preserve information ordinary replay loses), tested with a new protocol and fresh seeds.
 - The late DQN collapse (Section 6.2): whether it is rare with more seeds, and whether a lower learning rate, a slower target update or early stopping on greedy evaluation prevents it.
 - A larger layout pool, convolutional networks for the full-map observation, and longer training for the generalization study.
 - Optimistic initialisation or count-based exploration bonuses for DQN, to test the explanation of the terminal-hazard failure.

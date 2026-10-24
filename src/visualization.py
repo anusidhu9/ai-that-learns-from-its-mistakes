@@ -18,9 +18,23 @@ from src.envs import ACTION_NAMES, EMPTY, GOAL, HAZARD, WALL, GridWorld
 from src.evaluation import mean_ci
 from src.fun import event_line
 
-AGENT_ORDER = ("random", "tabular_q", "dqn", "dqn_per")
-AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn_per": "DQN + PER"}
-AGENT_COLORS = {"random": "#8a8a85", "tabular_q": "#2a78d6", "dqn": "#eb6834", "dqn_per": "#1baf7a"}
+AGENT_ORDER = ("random", "tabular_q", "dqn", "dqn_per", "dqn_mistake", "dqn_per_mistake",
+               "dqn_5k", "dqn_mistake_5k", "dqn_10k")
+AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn_per": "DQN + PER",
+                "dqn_mistake": "DQN + mistakes", "dqn_per_mistake": "DQN + PER + mistakes",
+                # long_memory_mistakes arms (buffer size in brackets)
+                "dqn_5k": "DQN (5k)", "dqn_mistake_5k": "DQN + mistake memory (5k + 5k)",
+                "dqn_10k": "DQN (10k)"}
+# Mistake-aware variants share their base algorithm's hue (no palette hue left
+# passes the colorblind checks beside orange and aqua) and add a second
+# encoding instead: dash-dot lines, square markers and hatched bars.
+AGENT_COLORS = {"random": "#8a8a85", "tabular_q": "#2a78d6", "dqn": "#eb6834", "dqn_per": "#1baf7a",
+                "dqn_mistake": "#eb6834", "dqn_per_mistake": "#1baf7a",
+                "dqn_5k": "#eb6834", "dqn_mistake_5k": "#eb6834", "dqn_10k": "#6250d6"}
+AGENT_LINESTYLES = {"random": "--", "dqn_mistake": "-.", "dqn_per_mistake": "-.",
+                    "dqn_mistake_5k": "-."}
+AGENT_MARKERS = {"dqn_mistake": "s", "dqn_per_mistake": "s", "dqn_mistake_5k": "s"}
+AGENT_HATCHES = {"dqn_mistake": "///", "dqn_per_mistake": "///", "dqn_mistake_5k": "///"}
 MISTAKE_TYPES = ("collision", "revisit", "hazard", "timeout")
 MISTAKE_COLORS = {"collision": "#e87ba4", "revisit": "#6250d6", "hazard": "#e34948",
                   "timeout": "#eda100"}
@@ -185,7 +199,7 @@ def learning_curves_figure(histories: Dict[str, List[dict]], window: int = 25) -
             continue
         color = AGENT_COLORS.get(name, INK)
         style = dict(color=color, linewidth=2, label=AGENT_LABELS.get(name, name),
-                     linestyle="--" if name == "random" else "-")
+                     linestyle=AGENT_LINESTYLES.get(name, "-"))
         x, y = rolling_mean([r["success"] for r in history], window)
         ax_s.plot(x, y, **style)
         x, y = rolling_mean([r["mistakes"] for r in history], window)
@@ -299,9 +313,10 @@ def experiment_curves_figure(curves: List[dict], metric: str = "success",
             highs.append(high)
         color = AGENT_COLORS.get(agent, INK)
         ax.fill_between(episodes, lows, highs, color=color, alpha=0.10, linewidth=0)
-        ax.plot(episodes, means, color=color, linewidth=2, marker="o", markersize=4,
+        ax.plot(episodes, means, color=color, linewidth=2,
+                marker=AGENT_MARKERS.get(agent, "o"), markersize=4,
                 label=AGENT_LABELS.get(agent, agent),
-                linestyle="--" if agent == "random" else "-")
+                linestyle=AGENT_LINESTYLES.get(agent, "-"))
     _title(ax, f"Greedy {metric.replace('_', ' ')} during training (mean, 95% CI band)")
     ax.set_xlabel("Training episode")
     ax.set_ylabel(ylabel or metric.replace("_", " "))
@@ -332,8 +347,13 @@ def experiment_bars_figure(summary: List[dict], metric: str = "success") -> Figu
         bounds = [_clip_interval(metric, m - ci, m + ci) for m, ci in zip(means, cis)]
         xerr = np.array([[m - lo for m, (lo, _) in zip(means, bounds)],
                          [hi - m for m, (_, hi) in zip(means, bounds)]])
-        ax.barh(y, means, height=0.6, color=[AGENT_COLORS.get(a, INK) for a in agents],
-                xerr=xerr, error_kw={"ecolor": INK, "elinewidth": 1.2, "capsize": 4})
+        bars = ax.barh(y, means, height=0.6, color=[AGENT_COLORS.get(a, INK) for a in agents],
+                       xerr=xerr, error_kw={"ecolor": INK, "elinewidth": 1.2, "capsize": 4})
+        for bar, a in zip(bars, agents):
+            if a in AGENT_HATCHES:  # surface-colored hatch over the shared hue
+                bar.set_hatch(AGENT_HATCHES[a])
+                bar.set_edgecolor(SURFACE)
+                bar.set_linewidth(0)
         for yi, (m, (_, hi)) in enumerate(zip(means, bounds)):
             ax.text(hi, yi, f"  {m:.2f}", va="center", fontsize=9, color=INK)
         ax.set_yticks(y, [AGENT_LABELS.get(a, a) for a in agents])
@@ -459,6 +479,9 @@ def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int
                                 "hazards"), "hazard_maze_hazards.png")
     save(experiment_bars_figure(load_experiment(results_dir / "generalization")["summary"],
                                 "success"), "generalization_success.png")
+    long_memory = load_experiment(results_dir / "long_memory_mistakes")
+    save(experiment_bars_figure(long_memory["summary"], "success"), "long_memory_success.png")
+    save(experiment_curves_figure(long_memory["curves"], "success"), "long_memory_curves.png")
 
     trainer = Trainer(TrainConfig(env_preset="maze", agent="tabular_q", episodes=400, seed=seed,
                                   agent_kwargs={"epsilon": {"decay_episodes": 300}}))

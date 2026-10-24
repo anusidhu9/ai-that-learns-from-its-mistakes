@@ -1,0 +1,109 @@
+long_memory_mistakes, 10 seeds (2026-10-23). 30 runs (3 arms x seeds 100-109, 3,000 episodes each) trained in
+4 parallel worker processes with:
+  python -m src.evaluation --experiment long_memory_mistakes --root runs/experiments_long_memory --workers 4
+Settings were fixed in PROTOCOL.md before any run. Total wall time 2,699 s. Console output follows unchanged.
+
+Experiment long_memory_mistakes: Hazard mazes with a 5,000-transition replay buffer, so old experience is overwritten: does a 5,000-mistake reserve (25% of each batch) help? dqn_10k matches the variant's total memory. Train on layouts 3000-3049, test on held-out 4000-4049; seeds 100-109.
+  dqn_5k          seed 100  finished: train success 0.98
+  dqn_5k          seed 101  finished: train success 0.90
+  dqn_5k          seed 102  finished: train success 0.96
+  dqn_5k          seed 103  finished: train success 0.94
+  dqn_5k          seed 104  finished: train success 0.92
+  dqn_5k          seed 105  finished: train success 0.92
+  dqn_5k          seed 106  finished: train success 0.98
+  dqn_5k          seed 107  finished: train success 0.92
+  dqn_5k          seed 108  finished: train success 0.76
+  dqn_5k          seed 109  finished: train success 0.84
+  dqn_mistake_5k  seed 100  finished: train success 0.94
+  dqn_mistake_5k  seed 101  finished: train success 0.82
+  dqn_mistake_5k  seed 102  finished: train success 0.88
+  dqn_mistake_5k  seed 103  finished: train success 0.84
+  dqn_mistake_5k  seed 104  finished: train success 0.92
+  dqn_mistake_5k  seed 105  finished: train success 0.46
+  dqn_mistake_5k  seed 106  finished: train success 0.86
+  dqn_mistake_5k  seed 107  finished: train success 0.90
+  dqn_mistake_5k  seed 108  finished: train success 0.98
+  dqn_mistake_5k  seed 109  finished: train success 0.80
+  dqn_10k         seed 100  finished: train success 0.90
+  dqn_10k         seed 101  finished: train success 0.86
+  dqn_10k         seed 102  finished: train success 0.96
+  dqn_10k         seed 103  finished: train success 0.90
+  dqn_10k         seed 104  finished: train success 0.98
+  dqn_10k         seed 105  finished: train success 0.94
+  dqn_10k         seed 106  finished: train success 0.96
+  dqn_10k         seed 107  finished: train success 0.92
+  dqn_10k         seed 108  finished: train success 0.98
+  dqn_10k         seed 109  finished: train success 0.96
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent           split    seeds             success     path_efficiency               steps            mistakes             hazards
+----------------------------------------------------------------------------------------------------------------------------------
+dqn_5k          train       10       0.91 +/- 0.05       0.91 +/- 0.05      20.55 +/- 4.14       8.52 +/- 4.64       0.00 +/- 0.01
+dqn_5k          unseen      10       0.37 +/- 0.04       0.35 +/- 0.03      67.18 +/- 3.61      59.78 +/- 4.10       0.04 +/- 0.04
+dqn_mistake_5k  train       10       0.84 +/- 0.10       0.83 +/- 0.10      26.78 +/- 8.95     15.56 +/- 10.01       0.01 +/- 0.01
+dqn_mistake_5k  unseen      10       0.30 +/- 0.08       0.28 +/- 0.07      73.85 +/- 6.98      67.07 +/- 7.81       0.43 +/- 0.48
+dqn_10k         train       10       0.94 +/- 0.03       0.93 +/- 0.03      18.48 +/- 2.48       6.21 +/- 2.74       0.01 +/- 0.01
+dqn_10k         unseen      10       0.42 +/- 0.05       0.39 +/- 0.05      62.78 +/- 4.45      54.75 +/- 4.91       0.05 +/- 0.03
+
+Episode reward, steps to goal (successful episodes only) and mistake types:
+agent           split    seeds        total_reward       steps_to_goal         hazard_rate          collisions            revisits
+----------------------------------------------------------------------------------------------------------------------------------
+dqn_5k          train       10       0.44 +/- 0.22      12.87 +/- 0.11       0.00 +/- 0.01       3.04 +/- 1.47       5.39 +/- 3.69
+dqn_5k          unseen      10      -2.26 +/- 0.17      12.24 +/- 0.14       0.04 +/- 0.04      23.24 +/- 3.99      35.87 +/- 6.33
+dqn_mistake_5k  train       10       0.19 +/- 0.45      12.81 +/- 0.13       0.01 +/- 0.01       1.91 +/- 1.72      13.48 +/- 8.28
+dqn_mistake_5k  unseen      10      -2.58 +/- 0.58      12.20 +/- 0.14       0.05 +/- 0.03      17.81 +/- 5.49      48.13 +/- 5.37
+dqn_10k         train       10       0.59 +/- 0.12      12.91 +/- 0.09       0.01 +/- 0.01       0.77 +/- 0.97       5.37 +/- 2.65
+dqn_10k         unseen      10      -2.10 +/- 0.22      12.21 +/- 0.17       0.05 +/- 0.03      24.17 +/- 3.29      29.95 +/- 5.92
+
+Success-rate differences (permutation test):
+  [train] dqn_mistake_5k - dqn_5k: -0.07  (p = 0.183)
+           dqn_mistake_5k vs dqn_5k on success: difference -0.07, p = 0.183. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_10k - dqn_5k: +0.02  (p = 0.412)
+           dqn_10k vs dqn_5k on success: difference +0.02, p = 0.412. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_10k - dqn_mistake_5k: +0.10  (p = 0.020)
+           dqn_10k beats dqn_mistake_5k on success (p = 0.020). Not a fluke.
+  [unseen] dqn_mistake_5k - dqn_5k: -0.08  (p = 0.082)
+           dqn_mistake_5k vs dqn_5k on success: difference -0.08, p = 0.082. The jury is still out; more seeds needed before anyone gloats.
+  [unseen] dqn_10k - dqn_5k: +0.05  (p = 0.118)
+           dqn_10k vs dqn_5k on success: difference +0.05, p = 0.118. The jury is still out; more seeds needed before anyone gloats.
+  [unseen] dqn_10k - dqn_mistake_5k: +0.13  (p = 0.009)
+           dqn_10k beats dqn_mistake_5k on success (p = 0.009). Not a fluke.
+
+Other differences (permutation test):
+  [train] total_reward  dqn_mistake_5k - dqn_5k: -0.249  (p = 0.313)
+  [train] total_reward  dqn_10k - dqn_5k: +0.159  (p = 0.173)
+  [train] total_reward  dqn_10k - dqn_mistake_5k: +0.408  (p = 0.019)
+  [unseen] total_reward  dqn_mistake_5k - dqn_5k: -0.317  (p = 0.261)
+  [unseen] total_reward  dqn_10k - dqn_5k: +0.167  (p = 0.199)
+  [unseen] total_reward  dqn_10k - dqn_mistake_5k: +0.484  (p = 0.097)
+  [train] steps_to_goal dqn_mistake_5k - dqn_5k: -0.065  (p = 0.410)
+  [train] steps_to_goal dqn_10k - dqn_5k: +0.036  (p = 0.561)
+  [train] steps_to_goal dqn_10k - dqn_mistake_5k: +0.101  (p = 0.187)
+  [unseen] steps_to_goal dqn_mistake_5k - dqn_5k: -0.032  (p = 0.716)
+  [unseen] steps_to_goal dqn_10k - dqn_5k: -0.027  (p = 0.786)
+  [unseen] steps_to_goal dqn_10k - dqn_mistake_5k: +0.005  (p = 0.958)
+  [train] hazards       dqn_mistake_5k - dqn_5k: +0.004  (p = 0.627)
+  [train] hazards       dqn_10k - dqn_5k: +0.004  (p = 0.721)
+  [train] hazards       dqn_10k - dqn_mistake_5k: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_mistake_5k - dqn_5k: +0.386  (p = 0.115)
+  [unseen] hazards       dqn_10k - dqn_5k: +0.008  (p = 0.800)
+  [unseen] hazards       dqn_10k - dqn_mistake_5k: -0.378  (p = 0.149)
+  [train] hazard_rate   dqn_mistake_5k - dqn_5k: +0.004  (p = 0.627)
+  [train] hazard_rate   dqn_10k - dqn_5k: +0.004  (p = 0.721)
+  [train] hazard_rate   dqn_10k - dqn_mistake_5k: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_mistake_5k - dqn_5k: +0.010  (p = 0.702)
+  [unseen] hazard_rate   dqn_10k - dqn_5k: +0.008  (p = 0.780)
+  [unseen] hazard_rate   dqn_10k - dqn_mistake_5k: -0.002  (p = 1.000)
+  [train] collisions    dqn_mistake_5k - dqn_5k: -1.130  (p = 0.325)
+  [train] collisions    dqn_10k - dqn_5k: -2.266  (p = 0.018)
+  [train] collisions    dqn_10k - dqn_mistake_5k: -1.136  (p = 0.308)
+  [unseen] collisions    dqn_mistake_5k - dqn_5k: -5.436  (p = 0.087)
+  [unseen] collisions    dqn_10k - dqn_5k: +0.930  (p = 0.682)
+  [unseen] collisions    dqn_10k - dqn_mistake_5k: +6.366  (p = 0.039)
+
+Replay buffer at the end of training (transitions; mean over seeds):
+  dqn_5k          added    107290  main overwrote    102290
+  dqn_mistake_5k  added    112195  main overwrote    107195  reserve   5000, of which only in reserve   4560
+  dqn_10k         added    101621  main overwrote     91621
+
+Files written to runs\experiments_long_memory\long_memory_mistakes

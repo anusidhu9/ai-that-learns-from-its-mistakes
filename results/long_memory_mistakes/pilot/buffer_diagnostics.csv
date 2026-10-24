@@ -1,0 +1,2 @@
+agent,seed,transitions_added,main_capacity,main_size,main_overwritten,reserve_capacity,reserve_size,mistakes_seen,reserve_overwritten,reserve_span,reserve_only
+dqn_5k,900,106971,5000,5000,101971,,,,,,

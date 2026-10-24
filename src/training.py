@@ -27,7 +27,7 @@ from typing import Callable, Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from src.agents import DQNAgent, EpsilonSchedule, make_agent
+from src.agents import DQN_NICKNAMES, DQNAgent, EpsilonSchedule, make_agent
 from src.envs import EnvConfig, GridWorld, PRESETS, RewardConfig
 
 PathLike = Union[str, Path]
@@ -70,7 +70,8 @@ def run_episode(env: GridWorld, agent, train: bool = True, greedy: bool = False,
         action = agent.act(obs, greedy=greedy)
         next_obs, reward, terminated, truncated, info = env.step(action)
         if train:
-            stats = agent.update(obs, action, reward, next_obs, terminated, truncated)
+            stats = agent.update(obs, action, reward, next_obs, terminated, truncated,
+                                 info=info)
             if stats:
                 td_errors.append(abs(stats["td_error"]))
                 if "loss" in stats:
@@ -171,6 +172,8 @@ def build_agent(config: TrainConfig, env: GridWorld):
         kwargs["epsilon"] = EpsilonSchedule(**kwargs["epsilon"])
     if isinstance(kwargs.get("hidden"), list):
         kwargs["hidden"] = tuple(kwargs["hidden"])
+    if isinstance(kwargs.get("mistake_events"), list):
+        kwargs["mistake_events"] = tuple(kwargs["mistake_events"])
     return make_agent(config.agent, env.obs_size, env.n_actions, seed=config.seed, **kwargs)
 
 
@@ -461,7 +464,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--resume", metavar="RUN_DIR", help="continue an existing run")
     parser.add_argument("--run-dir", help="directory for a new run's logs and checkpoint")
     parser.add_argument("--agent", default="tabular_q",
-                        choices=["random", "tabular_q", "dqn", "dqn_per"])
+                        choices=["random", "tabular_q", *DQN_NICKNAMES])
     parser.add_argument("--preset", default="maze", choices=sorted(PRESETS))
     parser.add_argument("--episodes", type=int, default=None,
                         help="total episodes (default 400; with --resume, extends the run)")

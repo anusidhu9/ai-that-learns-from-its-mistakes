@@ -13,7 +13,7 @@ def row(i=0, success=False, steps=100, mistakes=50, collisions=0, hazards=0, rev
 
 
 def test_every_agent_has_a_nickname_and_tagline():
-    for name in ("random", "tabular_q", "dqn", "dqn_per"):
+    for name in ("random", "tabular_q", "dqn", "dqn_per", "dqn_mistake", "dqn_per_mistake"):
         agent = make_agent(name, 8, 4, hidden=(8,)) if "dqn" in name else make_agent(name, 8, 4)
         assert agent.nickname == fun.NICKNAMES[name]
         assert fun.TAGLINES[name]

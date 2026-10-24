@@ -2,6 +2,24 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Mistake-aware replay (Stage G)
+
+**Added**
+- `MistakeReplayBuffer` (`src/replay.py`): wraps the uniform or prioritized buffer and also keeps every collision and hazard transition in a circular reserve; `mistake_fraction` of each batch is drawn from it. Reserve samples get importance weight 1 and never change PER priorities. Insertion counters (`diagnostics()`) show how far back each buffer remembers; they use no random numbers.
+- DQN options `mistake_replay`, `mistake_fraction` (0.25), `mistake_capacity` (5,000) and `mistake_events`, and the agents `dqn_mistake` and `dqn_per_mistake`. Off by default: DQN and DQN + PER train exactly as before (checked with training fingerprints and by reproducing `hazard_maze`).
+- `agent.update(..., info=None)`: an optional keyword argument through which agents can read the step's events. A mistake is identified from `info["events"]`, never from the reward, because a revisit plus a timeout costs more than a wall bump and rewards are configurable. Positional calls are unchanged.
+- Metrics `steps_to_goal` (mean steps of successful episodes only; empty when a run never succeeded) and `hazard_rate` (share of episodes touching a hazard). Results saved before these metrics existed still load.
+- Experiments `mistakes_hazard_maze`, `long_memory_pilot` and `long_memory_mistakes`. `Experiment.agent_types` lets one algorithm appear as several arms (for example two buffer sizes). `--workers N` trains N runs at a time with the same results. `buffer_diagnostics.csv` records how much each DQN run's buffer forgot.
+- `results/mistakes_hazard_maze/` and `results/long_memory_mistakes/` (protocol, pilot, raw results, analysis), two figures, README and REPORT sections 6.6–6.7, and 43 tests (197 in total). These cover reserve capacity, sampling proportions, that mistakes come only from collision and hazard events, compatibility with PER, exact resumption, no duplicated transitions, and no leakage of held-out mazes into training.
+
+**Results**
+- `mistakes_hazard_maze` (seeds 0–9): no significant difference on any metric. The 20,000-transition buffer barely forgot anything, so this tested over-weighting mistakes, not remembering them.
+- `long_memory_mistakes` (pre-registered; fresh seeds 100–109; 50 training and 50 held-out hazard mazes; 5,000-transition buffer): held-out success 0.30 with mistake memory vs 0.37 without (p = 0.082, behind in 9 of 10 seeds). That is no evidence of benefit. A DQN with a 10,000-transition buffer, matching the total memory, did best at 0.42 (exploratory, p = 0.009 against mistake memory).
+
+**Changed**
+- Chart styles: mistake-replay variants share their base algorithm's color with dash-dot lines, square markers and hatched bars, because no palette color passed the colorblind checks next to orange and aqua. The memory control uses violet.
+- The dashboard's Results tab and the experiment command line handle arm labels, `steps_to_goal` and `hazard_rate`.
+
 ## Continuous integration
 
 - `.github/workflows/tests.yml` runs `pytest -m "not slow"` on Python 3.10 and 3.12 for every push to `main` and every pull request, so a broken change shows up on GitHub instead of in someone's Colab session. It installs the CPU-only PyTorch wheel (the default one bundles CUDA and is several GB). The slow full-training test runs only when the workflow is started by hand with "Also run the slow full-training test" ticked.

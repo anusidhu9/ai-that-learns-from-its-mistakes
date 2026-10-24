@@ -29,7 +29,7 @@ from src.envs import PRESETS, RewardConfig
 from src.evaluation import (EXPERIMENTS, compare_agents, evaluate_agent, format_p,
                             load_experiment)
 from src.training import (TrainConfig, Trainer, build_env, compare_phases, load_agent)
-from src.visualization import (AGENT_COLORS, AGENT_LABELS, experiment_bars_figure,
+from src.visualization import (AGENT_COLORS, AGENT_LABELS, _agents_in, experiment_bars_figure,
                                experiment_curves_figure, frame_figure, learning_curves_figure,
                                maze_figure, mistake_heatmap_figure, mistake_types_figure,
                                record_episode, reward_breakdown_figure)
@@ -55,13 +55,15 @@ def code_version() -> str:
         return "unknown"
 
 AGENT_CHOICES = [(f"{AGENT_LABELS[a]} ({fun.NICKNAMES[a]})", a)
-                 for a in ("tabular_q", "dqn", "dqn_per", "random")]
+                 for a in ("tabular_q", "dqn", "dqn_per", "dqn_mistake", "dqn_per_mistake",
+                           "random")]
 PRESET_CHOICES = list(PRESETS)
 METRIC_CHOICES = [("Success rate", "success"), ("Path efficiency", "path_efficiency"),
                   ("Mistakes per episode", "mistakes"), ("Steps", "steps"),
                   ("Total reward", "total_reward")]
 UNSEEN_BASE = 1000
-MAX_EPISODES = {"random": 1000, "tabular_q": 2000, "dqn": 800, "dqn_per": 800}
+MAX_EPISODES = {"random": 1000, "tabular_q": 2000, "dqn": 800, "dqn_per": 800,
+                "dqn_mistake": 800, "dqn_per_mistake": 800}
 
 
 # ---------------------------------------------------------------------------
@@ -102,15 +104,14 @@ def _summary_frame(summary: List[dict]) -> pd.DataFrame:
 
 
 def _tests_frame(results: List[dict]) -> pd.DataFrame:
-    agents = [a for a in ("random", "tabular_q", "dqn", "dqn_per")
-              if any(r["agent"] == a for r in results)]
+    agents = _agents_in(results)
     splits = [s for s in ("train", "unseen") if any(r["split"] == s for r in results)]
     rows = []
     for split in splits:
         for a, b in itertools.combinations(agents, 2):
             c = compare_agents(results, b, a, "success", split)
             rows.append({"split": split,
-                         "comparison": f"{AGENT_LABELS[b]} − {AGENT_LABELS[a]}",
+                         "comparison": f"{AGENT_LABELS.get(b, b)} − {AGENT_LABELS.get(a, a)}",
                          "difference": round(c["difference"], 2),
                          "p-value": format_p(c["p_value"]).removeprefix("p = ").removeprefix("p "),
                          "verdict": fun.verdict(c["p_value"], c["difference"], b, a)})
@@ -126,7 +127,7 @@ def show_results(name: str, metric: str):
     unseen = (f" Tested on {len(e.unseen_layouts)} unseen layouts."
               if e.unseen_layouts else "")
     header = (f"### {name}\n{e.description}\n\n"
-              f"**{len(e.seeds)} seeds** × {', '.join(AGENT_LABELS[a] for a in e.agents)}; "
+              f"**{len(e.seeds)} seeds** × {', '.join(AGENT_LABELS.get(a, a) for a in e.agents)}; "
               f"{e.episodes} training episodes each; greedy evaluation every "
               f"{e.eval_every} episodes.{unseen} Error bars and bands are 95% confidence "
               f"intervals across seeds.")
@@ -434,7 +435,7 @@ rely on what it learned.
 | Agent | Nickname | In one line |
 |---|---|---|
 """ + "\n".join(f"| {AGENT_LABELS[a]} | {fun.NICKNAMES[a]} | {fun.TAGLINES[a]} |"
-                for a in ("random", "tabular_q", "dqn", "dqn_per")) + """
+                for a in ("random", "tabular_q", "dqn", "dqn_per", "dqn_mistake", "dqn_per_mistake")) + """
 
 ## Achievements
 

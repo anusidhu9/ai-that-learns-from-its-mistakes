@@ -146,6 +146,62 @@ def test_load_experiment_and_compare(tmp_path):
         compare_agents(out["results"], "dqn", "random")
 
 
+def test_steps_to_goal_counts_only_successful_episodes():
+    env = make_env("maze")
+    agent = TabularQAgent(env.n_actions, seed=0, epsilon=EpsilonSchedule(decay_episodes=150))
+    train_agent(env, agent, 200, seed=0)
+    res = evaluate_agent(agent, env, episodes=3, seed=1)
+    wins = [e["steps"] for e in res["episodes"] if e["success"]]
+    assert wins and res["steps_to_goal"] == pytest.approx(np.mean(wins))
+    lost = evaluate_agent(RandomAgent(env.n_actions, seed=0), env, episodes=2, seed=0)
+    if not any(e["success"] for e in lost["episodes"]):
+        assert lost["steps_to_goal"] is None  # undefined, not 100 and not 0
+
+
+def test_summarize_skips_undefined_and_missing_steps_to_goal():
+    base = {"agent": "a", "split": "train", **{m: 1.0 for m in METRICS}}
+    results = [{**base, "steps_to_goal": 10.0}, {**base, "steps_to_goal": 20.0},
+               {**base, "steps_to_goal": None}]
+    old = {k: v for k, v in base.items() if k != "steps_to_goal"}  # saved before the metric
+    row = summarize(results + [old])[0]
+    assert row["n_seeds"] == 4 and row["steps_to_goal_n"] == 2
+    assert row["steps_to_goal_mean"] == pytest.approx(15.0)
+    c = compare_agents(results + [{**base, "agent": "b", "steps_to_goal": 30.0},
+                                  {**base, "agent": "b", "steps_to_goal": 40.0}],
+                       "b", "a", "steps_to_goal")
+    assert c["difference"] == pytest.approx(20.0)
+
+
+def test_undefined_metric_survives_csv_round_trip(tmp_path):
+    from src.evaluation import _read_csv, _write_csv
+    rows = [{"agent": "a", "seed": 0, "steps_to_goal": None, "success": 0.0},
+            {"agent": "a", "seed": 1, "steps_to_goal": 12.0, "success": 1.0}]
+    _write_csv(tmp_path / "r.csv", rows, ["agent", "seed", "steps_to_goal", "success"])
+    assert _read_csv(tmp_path / "r.csv") == rows
+
+
+def test_mistake_experiment_matches_hazard_maze_settings():
+    from src.evaluation import EXPERIMENTS
+    base, new = EXPERIMENTS["hazard_maze"], EXPERIMENTS["mistakes_hazard_maze"]
+    for field in ("env_preset", "env_overrides", "seeds", "episodes", "decay_episodes",
+                  "eval_every", "eval_episodes", "agent_kwargs"):
+        assert getattr(new, field) == getattr(base, field), field
+    assert new.agents == ("dqn", "dqn_per", "dqn_mistake", "dqn_per_mistake")
+
+
+def test_mistake_experiment_smoke(tmp_path):
+    exp = Experiment(name="tiny_mistakes", env_preset="maze_hazards",
+                     agents=("dqn", "dqn_mistake"), seeds=(0, 1), episodes=6,
+                     decay_episodes=4, eval_every=3, eval_episodes=2,
+                     agent_kwargs={a: {"hidden": [16], "learning_starts": 50, "batch_size": 16}
+                                   for a in ("dqn", "dqn_mistake")})
+    out = run_experiment(exp, tmp_path, log=quiet)
+    assert {r["agent"] for r in out["results"]} == {"dqn", "dqn_mistake"}
+    assert all("steps_to_goal" in r for r in out["results"])
+    loaded = load_experiment(tmp_path / "tiny_mistakes")
+    assert loaded["results"] == out["results"]
+
+
 def test_summarize_groups_by_agent_and_split():
     results = [{"agent": "a", "split": "train", **{m: 1.0 for m in METRICS}},
                {"agent": "a", "split": "train", **{m: 3.0 for m in METRICS}},
@@ -176,3 +232,144 @@ def test_format_p_never_shows_zero():
     assert format_p(0.00015) == "p < 0.001"
     assert format_p(0.008) == "p = 0.008"
     assert format_p(1.0) == "p = 1.000"
+
+
+# -- long-memory study: protocol, leakage and runner -----------------------------------
+
+def test_long_memory_protocol_settings():
+    from src.evaluation import EXPERIMENTS
+    exp = EXPERIMENTS["long_memory_mistakes"]
+    assert exp.agents == ("dqn_5k", "dqn_mistake_5k", "dqn_10k")
+    assert exp.seeds == tuple(range(100, 110))
+    assert (exp.episodes, exp.decay_episodes, exp.eval_every) == (3000, 2000, 500)
+    configs = {a: exp.train_config(a, 100) for a in exp.agents}
+    assert {a: c.agent for a, c in configs.items()} == {
+        "dqn_5k": "dqn", "dqn_mistake_5k": "dqn_mistake", "dqn_10k": "dqn"}
+    # identical except for buffer size and the mistake reserve
+    def rest(c):
+        kw = {k: v for k, v in c.agent_kwargs.items()
+              if k not in ("buffer_size", "mistake_capacity", "mistake_fraction")}
+        return (c.env_preset, c.env_overrides, kw, c.episodes, c.seed)
+    assert len({json.dumps(rest(c), sort_keys=True) for c in configs.values()}) == 1
+    assert configs["dqn_5k"].agent_kwargs["buffer_size"] == 5000
+    assert configs["dqn_mistake_5k"].agent_kwargs == {
+        "epsilon": {"decay_episodes": 2000}, "buffer_size": 5000,
+        "mistake_capacity": 5000, "mistake_fraction": 0.25}
+    assert configs["dqn_10k"].agent_kwargs["buffer_size"] == 10_000
+
+
+def _layout_keys(exp, layout_seeds):
+    from src.training import build_env
+    env = build_env(exp.train_config(exp.agents[0], exp.seeds[0]))
+    keys = set()
+    for s in layout_seeds:
+        env.reset(layout_seed=s)
+        keys.add((env.grid.tobytes(), env.start, env.goal))
+    return keys
+
+
+def test_held_out_layouts_are_new_mazes_and_seeds_are_fresh():
+    from src.evaluation import EXPERIMENTS, POOL, UNSEEN
+    exp, pilot = EXPERIMENTS["long_memory_mistakes"], EXPERIMENTS["long_memory_pilot"]
+    pool = tuple(exp.env_overrides["layout_pool"])
+    train, held = _layout_keys(exp, pool), _layout_keys(exp, exp.unseen_layouts)
+    assert len(train) == 50 and len(held) == 50       # no repeated maze within a split
+    assert not train & held                           # no held-out maze seen in training
+    used_layouts = {0} | set(POOL) | set(UNSEEN)
+    for layouts in (pool, exp.unseen_layouts, pilot.env_overrides["layout_pool"],
+                    pilot.unseen_layouts):
+        assert not set(layouts) & used_layouts
+    pilot_layouts = set(pilot.env_overrides["layout_pool"]) | set(pilot.unseen_layouts)
+    assert not set(pool) & pilot_layouts and not set(exp.unseen_layouts) & pilot_layouts
+    earlier_seeds = set().union(*(e.seeds for n, e in EXPERIMENTS.items()
+                                  if not n.startswith("long_memory")))
+    assert not set(exp.seeds) & earlier_seeds and not set(pilot.seeds) & set(exp.seeds)
+
+
+TINY_ARMS = dict(name="tiny_arms", env_preset="maze_hazards",
+                 env_overrides={"layout_pool": [3000, 3001, 3002], "obs_mode": "local"},
+                 agents=("small", "small_mistake", "big"), seeds=(0, 1), episodes=6,
+                 decay_episodes=4, eval_every=3, unseen_layouts=(4000, 4001),
+                 agent_types={"small": "dqn", "small_mistake": "dqn_mistake", "big": "dqn"},
+                 agent_kwargs={"small": {"buffer_size": 150, "hidden": [16], "learning_starts": 50},
+                               "small_mistake": {"buffer_size": 150, "mistake_capacity": 150,
+                                                 "hidden": [16], "learning_starts": 50},
+                               "big": {"buffer_size": 300, "hidden": [16], "learning_starts": 50}})
+
+
+def test_arms_and_buffer_diagnostics(tmp_path):
+    out = run_experiment(Experiment(**TINY_ARMS), tmp_path, log=quiet)
+    assert {r["agent"] for r in out["results"]} == {"small", "small_mistake", "big"}
+    cfg = json.loads((tmp_path / "tiny_arms" / "big_s0" / "config.json").read_text())
+    assert cfg["agent"] == "dqn" and cfg["agent_kwargs"]["buffer_size"] == 300
+    rows = {(r["agent"], r["seed"]): r for r in out["buffers"]}
+    assert rows[("small", 0)]["main_capacity"] == 150 and rows[("big", 0)]["main_capacity"] == 300
+    assert rows[("small", 0)]["main_overwritten"] > 0
+    assert rows[("small_mistake", 0)]["reserve_size"] != "" and rows[("small", 0)]["reserve_size"] == ""
+    assert (tmp_path / "tiny_arms" / "buffer_diagnostics.csv").exists()
+    loaded = load_experiment(tmp_path / "tiny_arms")
+    assert loaded["experiment"].agent_types == TINY_ARMS["agent_types"]
+
+
+def test_training_only_ever_resets_to_pool_layouts(tmp_path):
+    from src.training import load_history
+    run_experiment(Experiment(**TINY_ARMS), tmp_path, log=quiet)
+    for run in (tmp_path / "tiny_arms").glob("*_s*"):
+        seen = {r["layout_seed"] for r in load_history(run)}
+        assert seen and seen <= set(TINY_ARMS["env_overrides"]["layout_pool"]), run.name
+
+
+def test_held_out_layouts_are_only_evaluated_once_at_the_end(tmp_path, monkeypatch):
+    import src.evaluation as ev
+    calls = []
+    real = ev.evaluate_agent
+
+    def spy(agent, env, layout_seeds=None, **kw):
+        calls.append(tuple(layout_seeds) if layout_seeds is not None else None)
+        return real(agent, env, layout_seeds=layout_seeds, **kw)
+
+    monkeypatch.setattr(ev, "evaluate_agent", spy)
+    exp = Experiment(**{**TINY_ARMS, "agents": ("small_mistake",)})
+    run_experiment(exp, tmp_path, log=quiet)
+    held = tuple(TINY_ARMS["unseen_layouts"])
+    assert calls.count(held) == len(exp.seeds)          # once per run, at the end
+    for i, c in enumerate(calls):
+        if c == held:
+            assert calls[i - 1] == tuple(TINY_ARMS["env_overrides"]["layout_pool"])
+
+
+def test_evaluation_never_changes_the_agent_or_its_buffer():
+    import pickle
+    import torch
+    from src.agents import make_agent
+    env = make_env("maze_hazards", obs_mode="local", layout_pool=(3000, 3001))
+    agent = make_agent("dqn_mistake", env.obs_size, env.n_actions, seed=0, hidden=(16,),
+                       buffer_size=200, mistake_capacity=100, learning_starts=50)
+    train_agent(env, agent, 4, seed=0)
+    before = pickle.dumps(agent.state_dict(include_buffer=True))
+    counters = (agent.env_steps, agent.updates, agent.episodes, agent.buffer.added)
+    evaluate_agent(agent, env, layout_seeds=(4000, 4001, 4002), seed=1)
+    after = agent.state_dict(include_buffer=True)
+    assert (agent.env_steps, agent.updates, agent.episodes, agent.buffer.added) == counters
+    old = pickle.loads(before)
+    for name in ("online", "target"):
+        for k in old[name]:
+            assert torch.equal(old[name][k], after[name][k])
+    np.testing.assert_array_equal(old["buffer"]["main"]["obs"], after["buffer"]["main"]["obs"])
+    np.testing.assert_array_equal(old["buffer"]["reserve"]["obs"], after["buffer"]["reserve"]["obs"])
+
+
+def test_hazard_rate_is_share_of_episodes_touching_a_hazard():
+    env = make_env("maze_hazards")
+    res = evaluate_agent(RandomAgent(env.n_actions, seed=0), env, episodes=6, seed=0)
+    expected = np.mean([e["hazards"] > 0 for e in res["episodes"]])
+    assert res["hazard_rate"] == pytest.approx(expected)
+
+
+def test_parallel_workers_give_the_same_results(tmp_path):
+    exp = Experiment(**{**TINY_ARMS, "agents": ("small", "small_mistake")})
+    serial = run_experiment(exp, tmp_path / "serial", log=quiet)
+    parallel = run_experiment(exp, tmp_path / "parallel", log=quiet, workers=2)
+    assert parallel["results"] == serial["results"]
+    assert parallel["curves"] == serial["curves"]
+    assert parallel["buffers"] == serial["buffers"]

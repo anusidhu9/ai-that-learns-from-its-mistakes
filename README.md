@@ -10,7 +10,7 @@
 
 Reinforcement-learning agents explore grid worlds, get **rewarded** for reaching the goal and **penalised** for mistakes (hitting walls, stepping on hazards, revisiting cells, running out of time), and are then tested to see whether they actually got better. Everything runs on a free CPU: Google Colab or a laptop.
 
-The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN) and DQN with prioritized experience replay across five experiments, 5–10 seeds each, with greedy evaluation, 95% confidence intervals and permutation tests. It includes an interactive **Gradio dashboard** and a mildly sarcastic commentator.
+The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN), DQN with prioritized experience replay and DQN with an explicit memory of its mistakes across seven experiments, 5–10 seeds each, with greedy evaluation, 95% confidence intervals and permutation tests. It includes an interactive **Gradio dashboard** and a mildly sarcastic commentator.
 
 ![Mistakes at each cell early vs late in training](docs/figures/mistake_heatmap.png)
 
@@ -37,14 +37,33 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **But DQN is less reliable.** One of DQN's 10 hazard-maze runs solved the maze from episode 150 to 350, then unlearned it and ended the run walking into a wall, and one DQN + PER run on `fixed_maze` never solved its maze at all. Tabular Q reached the goal in all 25 of its fixed-layout runs.
 - **DQN generalizes better to mazes it has never seen.** Trained on 50 mazes and tested on 50 new ones, DQN reached the goal in 45% of unseen mazes against 34% for tabular Q (p = 0.003), and was ahead in 9 of 10 seeds. Its successes on new mazes were near-shortest paths (path efficiency 0.45 vs 0.15, p < 0.001), while tabular Q's were mostly long wanders. On the training mazes the two were level (0.75 vs 0.73, p = 0.56).
 - **Prioritized replay did not help** on these small tasks.
+- **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
 
 **What it does not (yet) support**
 - Whether prioritized replay helps or hurts: DQN + PER never differed significantly from plain DQN.
 - How common DQN's late collapse is: it happened in 1 of 10 hazard-maze runs, too few to estimate a rate.
+- That mistake memory *hurts*: it was behind plain DQN on held-out mazes in 9 of 10 seeds, but the difference was not significant (p = 0.082).
 
 | Learning to avoid mistakes (fixed maze) | When fewer mistakes is not better (terminal hazards) |
 |---|---|
 | ![Greedy mistakes during training](docs/figures/fixed_maze_mistakes.png) | ![Greedy success with terminal hazards](docs/figures/terminal_hazards_success.png) |
+
+### Replaying mistakes explicitly
+
+The learning agents above learn from mistakes only through their penalties. **Mistake-aware replay** (`dqn_mistake`) makes it literal: every transition where the agent hit a wall or a hazard is also copied into a separate reserve, and 25% of every training batch comes from that reserve. Mistakes are read from the environment's events, never guessed from the reward. The option is off by default, and with it off DQN reproduces every earlier result exactly.
+
+Two experiments tested it, with settings fixed before either ran:
+
+| Experiment | What it tests | DQN | DQN + mistakes | Same-memory control | Verdict |
+|---|---|---|---|---|---|
+| [`mistakes_hazard_maze`](results/mistakes_hazard_maze/ANALYSIS.md): hazard maze, seeds 0–9 | Over-weighting recent mistakes (the 20k buffer barely forgot anything) | 0.90 ± 0.23 | 0.80 ± 0.30 | — | No difference (p = 1.0) |
+| [`long_memory_mistakes`](results/long_memory_mistakes/ANALYSIS.md): 50 training + 50 **held-out** hazard mazes, fresh seeds 100–109, [pre-registered](results/long_memory_mistakes/PROTOCOL.md) | Remembering mistakes after a 5k buffer forgot them | 0.37 ± 0.04 | 0.30 ± 0.08 | 0.42 ± 0.05 (10k buffer) | No evidence of benefit (p = 0.082) |
+
+*Greedy success rate; the `long_memory_mistakes` numbers are on held-out mazes.*
+
+In `long_memory_mistakes` the 5,000-transition buffer overwrote over 95% of everything the agent saw, and 82–98% of the mistakes in the reserve existed nowhere else, so long-term memory really was tested. DQN given the same 10,000 transitions of ordinary memory did best (exploratory: p = 0.009 against mistake memory). With mistake memory the agent bumped into fewer walls but walked in more loops, which echoes the terminal-hazard result: avoiding the penalised event is not the same as reaching the goal.
+
+![Success on training and held-out mazes, long-memory study](docs/figures/long_memory_success.png)
 
 ## Quick start
 
@@ -89,10 +108,11 @@ python -m src.training --resume runs/dqn_s0                   # continue after a
 python -m src.training --resume runs/dqn_s0 --episodes 800    # extend a finished run
 python -m src.evaluation --experiment fixed_maze              # a full multi-seed experiment
 python -m src.evaluation --experiment fixed_maze --seeds 2 --agents random tabular_q   # quick version
+python -m src.evaluation --experiment long_memory_mistakes --workers 4   # 4 runs at a time, same results
 python -m src.visualization                                   # regenerate docs/figures from results/
 ```
 
-Experiments are **resumable**: if Colab disconnects, run the same command again and finished runs are skipped while interrupted ones continue from their last checkpoint. On a laptop CPU the four fixed-layout experiments take roughly 10–30 minutes each (DQN dominates the time); `generalization` (3,000 episodes per run, about 9 minutes per DQN run) takes a few hours with all 10 seeds.
+Experiments are **resumable**: if Colab disconnects, run the same command again and finished runs are skipped while interrupted ones continue from their last checkpoint. On a laptop CPU the four fixed-layout experiments take roughly 10–30 minutes each (DQN dominates the time); `generalization` (3,000 episodes per run, about 9 minutes per DQN run) takes a few hours with all 10 seeds; `long_memory_mistakes` took 45 minutes with `--workers 4`.
 
 ## How it works
 
@@ -112,6 +132,7 @@ Experiments are **resumable**: if Colab disconnects, run the same command again 
 - **Tabular Q-learning**: `Q(s,a) ← Q(s,a) + α [r + γ max Q(s′,·) − Q(s,a)]`, with α = 0.5, γ = 0.99. The term in brackets, the TD error, is how far the prediction was from what happened: each penalty becomes a negative TD error that lowers the value of the action that caused it.
 - **DQN**: a 2×128 MLP minimising the Huber loss to `r + γ Q_target(s′, argmax Q(s′,·))` (Double DQN), with a target network copied every 100 updates and experience replay.
 - **DQN + PER**: replays transitions with probability ∝ |TD error|^0.6, corrected by importance-sampling weights.
+- **DQN + mistakes** (`dqn_mistake`, also `dqn_per_mistake`): keeps every collision and hazard transition in a 5,000-transition reserve as well as the normal buffer, and draws 25% of each batch from it.
 
 Exploration is ε-greedy, decaying linearly from 1.0 to 0.05. Timeouts are treated as truncation (the agent still bootstraps), not as true terminal states.
 
@@ -142,7 +163,7 @@ src/
   visualization.py  every chart, episode replays, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              154 tests (pytest); `-m "not slow"` skips one long training test
+tests/              197 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report
@@ -158,7 +179,7 @@ LICENSE             MIT License
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
 - 5–10 seeds per experiment: enough to show large differences, not small ones.
-- One set of hyperparameters per algorithm, tuned on the fixed maze only.
+- One set of hyperparameters per algorithm, tuned on the fixed maze only. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 
 See [REPORT.md](REPORT.md) for the full discussion. To write up a new experiment, start from [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md); to publish your own copy, follow [docs/PUBLISHING.md](docs/PUBLISHING.md).

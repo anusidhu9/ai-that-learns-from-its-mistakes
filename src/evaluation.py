@@ -20,6 +20,7 @@ import csv
 import itertools
 import json
 import math
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
@@ -27,11 +28,15 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 
 from src.envs import GridWorld
-from src.training import (PHASE_METRICS, TrainConfig, Trainer, build_env,
-                          run_episode)
+from src.training import (CHECKPOINT_FILE, PHASE_METRICS, TrainConfig, Trainer,
+                          _read_checkpoint, build_env, run_episode)
 
 PathLike = Union[str, Path]
-METRICS = PHASE_METRICS  # success, steps, total_reward, path_efficiency, mistakes, ...
+# success, steps, total_reward, path_efficiency, mistakes, ..., then steps_to_goal:
+# mean steps over successful episodes only, None when a run had no success.
+# Unlike `steps`, it does not count failed episodes as max_steps.
+# hazard_rate: fraction of episodes that stepped on at least one hazard.
+METRICS = PHASE_METRICS + ["steps_to_goal", "hazard_rate"]
 CURVE_FILE = "eval_curve.csv"
 FINAL_FILE = "final_eval.json"
 
@@ -130,7 +135,10 @@ def evaluate_agent(agent, env: GridWorld, layout_seeds: Optional[Sequence[int]] 
         agent.rng = original_rng
     for r in runs:
         r.pop("mistake_log", None)
-    result = {m: float(np.mean([float(r[m]) for r in runs])) for m in METRICS}
+    result = {m: float(np.mean([float(r[m]) for r in runs])) for m in PHASE_METRICS}
+    goal_steps = [r["steps"] for r in runs if r["success"]]
+    result["steps_to_goal"] = float(np.mean(goal_steps)) if goal_steps else None
+    result["hazard_rate"] = float(np.mean([r["hazards"] > 0 for r in runs]))
     result["n_episodes"] = len(runs)
     result["episodes"] = runs
     return result
@@ -147,6 +155,9 @@ class Experiment:
     unseen_layouts: layout seeds held out from training (requires env_overrides
     with a layout_pool); each final evaluation also runs on these.
     agent_kwargs: per-agent overrides, e.g. {"dqn": {"lr": 5e-4}}.
+    agent_types: arm label -> agent name, so one algorithm can appear as several
+    arms with different settings, e.g. {"dqn_5k": "dqn", "dqn_10k": "dqn"} with
+    the buffer sizes in agent_kwargs. Labels not listed are agent names.
     """
 
     name: str
@@ -161,13 +172,14 @@ class Experiment:
     unseen_layouts: Optional[Tuple[int, ...]] = None
     agent_kwargs: Dict[str, dict] = field(default_factory=dict)
     description: str = ""
+    agent_types: Dict[str, str] = field(default_factory=dict)
 
     def train_config(self, agent: str, seed: int) -> TrainConfig:
         kwargs = {} if agent == "random" else {"epsilon": {"decay_episodes": self.decay_episodes}}
         kwargs.update(self.agent_kwargs.get(agent, {}))
         return TrainConfig(env_preset=self.env_preset, env_overrides=dict(self.env_overrides),
-                           agent=agent, agent_kwargs=kwargs, episodes=self.episodes, seed=seed,
-                           checkpoint_every=self.eval_every)
+                           agent=self.agent_types.get(agent, agent), agent_kwargs=kwargs,
+                           episodes=self.episodes, seed=seed, checkpoint_every=self.eval_every)
 
     def train_layouts(self) -> Optional[List[int]]:
         pool = self.env_overrides.get("layout_pool")
@@ -176,6 +188,18 @@ class Experiment:
 
 POOL = tuple(range(50))
 UNSEEN = tuple(range(1000, 1050))
+# Fresh layouts and seeds for the long-memory study (none used by any earlier
+# experiment): train on LM_POOL, test once at the end on LM_HELDOUT.
+LM_POOL = tuple(range(3000, 3050))
+LM_HELDOUT = tuple(range(4000, 4050))
+LM_SEEDS = tuple(range(100, 110))
+LM_ARMS = {"dqn_5k": "dqn", "dqn_mistake_5k": "dqn_mistake", "dqn_10k": "dqn"}
+LM_KWARGS = {"dqn_5k": {"buffer_size": 5000},
+             "dqn_mistake_5k": {"buffer_size": 5000, "mistake_capacity": 5000,
+                                "mistake_fraction": 0.25},
+             "dqn_10k": {"buffer_size": 10_000}}
+LM_COMMON = dict(env_preset="maze_hazards", episodes=3000, decay_episodes=2000,
+                 eval_every=500, agent_types=LM_ARMS, agent_kwargs=LM_KWARGS)
 
 EXPERIMENTS: Dict[str, Experiment] = {
     "fixed_maze": Experiment(
@@ -191,6 +215,27 @@ EXPERIMENTS: Dict[str, Experiment] = {
     "open_hazards": Experiment(
         "open_hazards", "open_hazards",
         description="Fixed 8x8 open grid with 5 hazards and a random start/goal."),
+    "mistakes_hazard_maze": Experiment(
+        "mistakes_hazard_maze", "maze_hazards", seeds=tuple(range(10)),
+        agents=("dqn", "dqn_per", "dqn_mistake", "dqn_per_mistake"),
+        description="hazard_maze (same maze, seeds and schedule) comparing DQN, prioritized "
+                    "replay and mistake-aware replay (25% of each batch from a reserve of "
+                    "collisions and hazards)."),
+    "long_memory_mistakes": Experiment(
+        "long_memory_mistakes", **LM_COMMON,
+        env_overrides={"layout_pool": list(LM_POOL), "obs_mode": "local"},
+        agents=tuple(LM_ARMS), seeds=LM_SEEDS, unseen_layouts=LM_HELDOUT,
+        description="Hazard mazes with a 5,000-transition replay buffer, so old experience is "
+                    "overwritten: does a 5,000-mistake reserve (25% of each batch) help? "
+                    "dqn_10k matches the variant's total memory. Train on layouts 3000-3049, "
+                    "test on held-out 4000-4049; seeds 100-109."),
+    "long_memory_pilot": Experiment(
+        "long_memory_pilot", **LM_COMMON,
+        env_overrides={"layout_pool": list(range(5000, 5050)), "obs_mode": "local"},
+        agents=("dqn_5k",), seeds=(900,), unseen_layouts=tuple(range(6000, 6050)),
+        description="Feasibility pilot for long_memory_mistakes: baseline arm only, on its "
+                    "own seed and layouts, to measure run time and check that the buffer "
+                    "overwrites old transitions. Never used to choose settings for the variant."),
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},
@@ -215,6 +260,9 @@ def _read_csv(path: Path) -> List[dict]:
     for r in rows:
         for k, v in r.items():
             if k in ("agent", "split", "experiment"):
+                continue
+            if v == "":  # None when written (steps_to_goal of a run with no success)
+                r[k] = None
                 continue
             r[k] = float(v)
             if k in ("episode", "seed"):
@@ -290,18 +338,34 @@ def run_single(exp: Experiment, agent: str, seed: int, exp_dir: Path,
     return final
 
 
+def _quiet(_msg: str) -> None:
+    pass
+
+
 def run_experiment(exp: Experiment, root: PathLike = "runs/experiments",
-                   log: Callable[[str], None] = print) -> dict:
+                   log: Callable[[str], None] = print, workers: int = 1) -> dict:
     """Run (or resume) every agent x seed, then aggregate.
 
     Writes to <root>/<exp.name>/: experiment.json, one run directory per
     agent and seed, results.csv (final greedy metrics per run and split),
-    curves.csv (greedy learning curves) and summary.csv (mean and 95% CI).
+    curves.csv (greedy learning curves), summary.csv (mean and 95% CI) and,
+    for DQN agents, buffer_diagnostics.csv.
+
+    workers > 1 trains runs in that many processes first; each run is
+    independent and seeded, so the results are the same as with workers=1.
     """
     exp_dir = Path(root) / exp.name
     exp_dir.mkdir(parents=True, exist_ok=True)
     (exp_dir / "experiment.json").write_text(json.dumps(asdict(exp), indent=2))
     log(f"Experiment {exp.name}: {exp.description}")
+    if workers > 1:
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            jobs = {pool.submit(run_single, exp, agent, seed, exp_dir, _quiet): (agent, seed)
+                    for agent in exp.agents for seed in exp.seeds}
+            for job, (agent, seed) in jobs.items():
+                final = job.result()
+                log(f"  {agent:<15} seed {seed}  finished: train success "
+                    f"{final['train']['success']:.2f}")
 
     results, curves = [], []
     for agent in exp.agents:
@@ -317,10 +381,54 @@ def run_experiment(exp: Experiment, root: PathLike = "runs/experiments",
     _write_csv(exp_dir / "curves.csv", curves, ["agent", "seed", "episode"] + METRICS)
     summary = summarize(results)
     summary_fields = ["agent", "split", "n_seeds"] + [f"{m}_{s}" for m in METRICS
-                                                      for s in ("mean", "ci")]
+                                                      for s in ("mean", "ci")] + \
+        ["steps_to_goal_n"]
     _write_csv(exp_dir / "summary.csv", summary, summary_fields)
+    buffers = buffer_diagnostics(exp, exp_dir)
+    if buffers:
+        _write_csv(exp_dir / "buffer_diagnostics.csv", buffers, list(buffers[0]))
     return {"experiment": exp, "results": results, "curves": curves, "summary": summary,
-            "dir": exp_dir}
+            "buffers": buffers, "dir": exp_dir}
+
+
+def buffer_diagnostics(exp: Experiment, exp_dir: Path) -> List[dict]:
+    """Replay-buffer use at the end of each DQN run, read from its checkpoint.
+
+    Shows whether the main buffer overwrote old transitions and, for
+    mistake-aware replay, how many reserved mistakes only the reserve still
+    holds. Runs without a saved buffer (or without replay) are skipped.
+    """
+    rows = []
+    for agent in exp.agents:
+        for seed in exp.seeds:
+            path = exp_dir / f"{agent}_s{seed}" / CHECKPOINT_FILE
+            if not path.exists():
+                continue
+            state = _read_checkpoint(path)["agent"]
+            buf = state.get("buffer")
+            if buf is None:
+                continue
+            row = {"agent": agent, "seed": seed}
+            if "main" in buf:
+                stamps = np.asarray(buf["reserve_added_at"])
+                added, main_size = int(buf["added"]), int(buf["main"]["size"])
+                first_in_main = added - main_size
+                row.update(transitions_added=added, main_capacity=buf["main"]["capacity"],
+                           main_size=main_size, main_overwritten=first_in_main,
+                           reserve_capacity=buf["reserve"]["capacity"],
+                           reserve_size=len(stamps), mistakes_seen=buf["mistakes_seen"],
+                           reserve_overwritten=buf["mistakes_seen"] - len(stamps),
+                           reserve_span=int(added - stamps.min()) if len(stamps) else 0,
+                           reserve_only=int((stamps < first_in_main).sum()))
+            else:
+                added, main_size = int(state["env_steps"]), int(buf["size"])
+                row.update(transitions_added=added, main_capacity=buf["capacity"],
+                           main_size=main_size, main_overwritten=added - main_size)
+            rows.append(row)
+    fields = ["agent", "seed", "transitions_added", "main_capacity", "main_size",
+              "main_overwritten", "reserve_capacity", "reserve_size", "mistakes_seen",
+              "reserve_overwritten", "reserve_span", "reserve_only"]
+    return [{f: r.get(f, "") for f in fields} for r in rows]
 
 
 def load_experiment(exp_dir: PathLike) -> dict:
@@ -332,8 +440,18 @@ def load_experiment(exp_dir: PathLike) -> dict:
             "summary": summarize(results), "dir": exp_dir}
 
 
+def _values(runs: List[dict], metric: str) -> List[float]:
+    """One value per run, skipping runs where the metric is undefined (None)
+    or absent (results saved before the metric existed)."""
+    return [float(r[metric]) for r in runs if r.get(metric) is not None]
+
+
 def summarize(results: List[dict]) -> List[dict]:
-    """One row per (agent, split): each metric's mean and 95% CI over seeds."""
+    """One row per (agent, split): each metric's mean and 95% CI over seeds.
+
+    steps_to_goal averages only the seeds that reached the goal at least once;
+    steps_to_goal_n says how many seeds that is.
+    """
     groups: Dict[Tuple[str, str], List[dict]] = {}
     for r in results:
         groups.setdefault((r["agent"], r["split"]), []).append(r)
@@ -341,7 +459,8 @@ def summarize(results: List[dict]) -> List[dict]:
     for (agent, split), runs in groups.items():
         row = {"agent": agent, "split": split, "n_seeds": len(runs)}
         for m in METRICS:
-            row[f"{m}_mean"], row[f"{m}_ci"] = mean_ci([r[m] for r in runs])
+            row[f"{m}_mean"], row[f"{m}_ci"] = mean_ci(_values(runs, m))
+        row["steps_to_goal_n"] = len(_values(runs, "steps_to_goal"))
         rows.append(row)
     return rows
 
@@ -349,8 +468,8 @@ def summarize(results: List[dict]) -> List[dict]:
 def compare_agents(results: List[dict], a: str, b: str, metric: str = "success",
                    split: str = "train") -> dict:
     """Difference in a metric between two agents with a permutation p-value."""
-    va = [r[metric] for r in results if r["agent"] == a and r["split"] == split]
-    vb = [r[metric] for r in results if r["agent"] == b and r["split"] == split]
+    va = _values([r for r in results if r["agent"] == a and r["split"] == split], metric)
+    vb = _values([r for r in results if r["agent"] == b and r["split"] == split], metric)
     if not va or not vb:
         raise ValueError(f"no results for {a!r} and/or {b!r} on split {split!r}")
     return {"a": a, "b": b, "metric": metric, "split": split,
@@ -363,14 +482,17 @@ def format_summary(summary: List[dict],
                    metrics: Sequence[str] = ("success", "path_efficiency", "steps",
                                              "mistakes", "hazards")) -> str:
     """Plain-text table: mean +/- 95% CI per agent and split."""
-    header = f"{'agent':<11}{'split':<8}{'seeds':>6}" + "".join(f"{m:>20}" for m in metrics)
+    header = f"{'agent':<16}{'split':<8}{'seeds':>6}" + "".join(f"{m:>20}" for m in metrics)
     lines = [header, "-" * len(header)]
     for row in summary:
         cells = []
         for m in metrics:
             mean, ci = row[f"{m}_mean"], row[f"{m}_ci"]
-            cells.append(f"{mean:.2f} +/- {ci:.2f}" if not math.isnan(ci) else f"{mean:.2f}")
-        lines.append(f"{row['agent']:<11}{row['split']:<8}{row['n_seeds']:>6}"
+            if math.isnan(mean):
+                cells.append("-")
+            else:
+                cells.append(f"{mean:.2f} +/- {ci:.2f}" if not math.isnan(ci) else f"{mean:.2f}")
+        lines.append(f"{row['agent']:<16}{row['split']:<8}{row['n_seeds']:>6}"
                      + "".join(f"{c:>20}" for c in cells))
     return "\n".join(lines)
 
@@ -387,6 +509,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                         help="use seeds 0..N-1: fewer is quicker, more gives narrower "
                              "intervals and smaller attainable p-values")
     parser.add_argument("--agents", nargs="+", default=None, help="subset of agents to run")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="train runs in this many processes (same results as 1)")
     args = parser.parse_args(argv)
 
     exp = EXPERIMENTS[args.experiment]
@@ -394,10 +518,18 @@ def main(argv: Optional[List[str]] = None) -> None:
         exp = Experiment(**{**asdict(exp), "seeds": tuple(range(args.seeds))})
     if args.agents is not None:
         exp = Experiment(**{**asdict(exp), "agents": tuple(args.agents)})
-    out = run_experiment(exp, args.root)
+    out = run_experiment(exp, args.root, workers=args.workers)
 
     print("\nGreedy evaluation, mean +/- 95% CI across seeds:")
     print(format_summary(out["summary"]))
+    print("\nEpisode reward, steps to goal (successful episodes only) and mistake types:")
+    print(format_summary(out["summary"], ("total_reward", "steps_to_goal", "hazard_rate",
+                                          "collisions", "revisits")))
+    n_goal = {(r["agent"], r["split"]): r["steps_to_goal_n"] for r in out["summary"]}
+    missing = {k: v for k, v in n_goal.items() if v < len(exp.seeds)}
+    if missing:
+        print("steps_to_goal leaves out seeds that never reached the goal:",
+              ", ".join(f"{a}/{s}: {n} of {len(exp.seeds)} seeds" for (a, s), n in missing.items()))
     agents = list(exp.agents)
     splits = ["train"] + (["unseen"] if exp.unseen_layouts is not None else [])
     print("\nSuccess-rate differences (permutation test):")
@@ -408,6 +540,30 @@ def main(argv: Optional[List[str]] = None) -> None:
             c = compare_agents(out["results"], b, a, "success", split)
             print(f"  [{split}] {b} - {a}: {c['difference']:+.2f}  ({format_p(c['p_value'])})")
             print(f"           {fun.verdict(c['p_value'], c['difference'], b, a)}")
+    print("\nOther differences (permutation test):")
+    for metric in ("total_reward", "steps_to_goal", "hazards", "hazard_rate", "collisions"):
+        for split in splits:
+            for a, b in itertools.combinations(agents, 2):
+                if len(exp.seeds) < 2:
+                    continue
+                try:
+                    c = compare_agents(out["results"], b, a, metric, split)
+                except ValueError:  # no defined values (e.g. no seed reached the goal)
+                    continue
+                print(f"  [{split}] {metric:<13} {b} - {a}: {c['difference']:+.3f}  "
+                      f"({format_p(c['p_value'])})")
+    if out["buffers"]:
+        print("\nReplay buffer at the end of training (transitions; mean over seeds):")
+        for agent in exp.agents:
+            rows = [r for r in out["buffers"] if r["agent"] == agent]
+            if not rows:
+                continue
+            line = (f"  {agent:<15} added {np.mean([r['transitions_added'] for r in rows]):>9.0f}"
+                    f"  main overwrote {np.mean([r['main_overwritten'] for r in rows]):>9.0f}")
+            if rows[0]["reserve_size"] != "":
+                line += (f"  reserve {np.mean([r['reserve_size'] for r in rows]):>6.0f}, of which "
+                         f"only in reserve {np.mean([r['reserve_only'] for r in rows]):>6.0f}")
+            print(line)
     print(f"\nFiles written to {out['dir']}")
 
 
