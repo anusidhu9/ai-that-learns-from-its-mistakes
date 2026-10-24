@@ -2,6 +2,11 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Continuous integration
+
+- `.github/workflows/tests.yml` runs `pytest -m "not slow"` on Python 3.10 and 3.12 for every push to `main` and every pull request, so a broken change shows up on GitHub instead of in someone's Colab session. It installs the CPU-only PyTorch wheel (the default one bundles CUDA and is several GB). The slow full-training test runs only when the workflow is started by hand with "Also run the slow full-training test" ticked.
+- The README shows a Tests badge with the latest result.
+
 ## generalization with 10 seeds
 
 - `generalization` now uses 10 seeds (was 3). With 3 seeds no difference could reach p < 0.10; with 10, DQN generalizes better than tabular Q-learning: 45% vs 34% success on 50 unseen mazes (p = 0.003, ahead in 9 of 10 seeds), with path efficiency 0.45 vs 0.15 (p < 0.001). On the training mazes they are level (p = 0.56). Seeds 0–2 were retrained and reproduced the earlier results exactly. `results/generalization`, README, REPORT (Sections 1, 5, 6.5, 7, 9–11), notebook section 11 and the generalization figure are updated.

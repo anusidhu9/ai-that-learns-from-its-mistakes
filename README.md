@@ -1,5 +1,6 @@
 # MIND: an AI that learns from its own mistakes
 
+[![Tests](https://github.com/anusidhu9/ai-that-learns-from-its-mistakes/actions/workflows/tests.yml/badge.svg)](https://github.com/anusidhu9/ai-that-learns-from-its-mistakes/actions/workflows/tests.yml)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/anusidhu9/ai-that-learns-from-its-mistakes/blob/main/MIND_Colab.ipynb)
 [![Open in Hugging Face Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/anusidhu/ai-that-learns-from-its-own-mistakes)
 
@@ -142,6 +143,7 @@ src/
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
 tests/              154 tests (pytest); `-m "not slow"` skips one long training test
+.github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report
 MIND_Colab.ipynb    end-to-end notebook
