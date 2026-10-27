@@ -300,3 +300,33 @@ def test_checkpoint_loading_refuses_arbitrary_objects(tmp_path):
     torch.save({"agent": Evil()}, path)
     with pytest.raises(pickle.UnpicklingError):
         load_agent(path)
+
+
+# -- hand-drawn layouts ----------------------------------------------------------------------
+
+CORRIDOR_ROOM = "#######\n#S....#\n#.###.#\n#....G#\n#######"
+
+
+def test_layout_text_replaces_the_preset_layout(tmp_path):
+    config = TrainConfig(**{**TABULAR, "layout_text": CORRIDOR_ROOM})
+    env = build_env(config)
+    env.reset(seed=0)
+    assert env.to_ascii() == CORRIDOR_ROOM
+    assert env.config.max_steps == 100 and env.obs_size == 4 * 5 * 7  # preset rules kept
+    assert TrainConfig.from_json(config.to_json()) == config
+    trainer = Trainer(config, run_dir=tmp_path / "run")
+    trainer.train()
+    agent, loaded_env, loaded = load_agent(tmp_path / "run" / CHECKPOINT_FILE)
+    loaded_env.reset(seed=0)
+    assert loaded.layout_text == CORRIDOR_ROOM and loaded_env.to_ascii() == CORRIDOR_ROOM
+
+
+def test_unusable_layout_text_is_rejected():
+    with pytest.raises(ValueError, match="can't be reached"):
+        build_env(TrainConfig(layout_text="#####\n#S#G#\n#####"))
+
+
+def test_configs_without_layout_text_still_load():
+    old = json.loads(TrainConfig().to_json())
+    del old["layout_text"]
+    assert TrainConfig(**old).layout_text is None

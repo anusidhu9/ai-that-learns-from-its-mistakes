@@ -5,14 +5,15 @@ import pytest
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
-from src.agents import EpsilonSchedule, TabularQAgent
-from src.envs import make_env
+from src.agents import EpsilonSchedule, TabularQAgent, make_agent
+from src.envs import GOAL, WALL, make_env
 from src.evaluation import load_experiment
 from src.training import TrainConfig, Trainer, train_agent
-from src.visualization import (_clip_interval, experiment_bars_figure, experiment_curves_figure,
-                               frame_figure, learning_curves_figure, maze_figure,
-                               mistake_heatmap_figure, mistake_types_figure, record_episode,
-                               reward_breakdown_figure, rolling_mean)
+from src.visualization import (_clip_interval, cell_at, experiment_bars_figure,
+                               experiment_curves_figure, frame_figure, learning_curves_figure,
+                               maze_figure, maze_image, mistake_heatmap_figure,
+                               mistake_types_figure, policy_map, policy_map_figure,
+                               record_episode, reward_breakdown_figure, rolling_mean)
 
 RESULTS = Path(__file__).resolve().parent.parent / "results"
 
@@ -134,3 +135,49 @@ def test_no_legend_or_title_overlaps(trained):
         for i, t in enumerate(titles):
             for other in titles[i + 1:]:
                 assert not _boxes_overlap(t, other), "two titles overlap"
+
+
+# -- policy map and maze editor image ------------------------------------------------
+
+def test_policy_map_arrows_are_the_greedy_actions(trained):
+    env = make_env("maze_hazards")
+    env.reset(seed=0)
+    pm = policy_map(env, trained.agent)
+    assert pm["seen"].any()
+    for r, c in np.argwhere(pm["seen"] & ~pm["tie"]):
+        assert trained.agent.act(env.observation_at((r, c)), greedy=True) == pm["action"][r, c]
+    assert (pm["action"][~pm["seen"]] == -1).all()
+    assert np.isnan(pm["value"][~pm["seen"]]).all()
+    assert isinstance(policy_map_figure(env, trained.agent), Figure)
+
+
+def test_policy_map_marks_unvisited_cells_and_handles_random_agents():
+    env = make_env("maze")
+    env.reset(seed=0)
+    fresh = TabularQAgent(env.n_actions)
+    pm = policy_map(env, fresh)
+    assert not pm["seen"].any()
+    assert isinstance(policy_map_figure(env, fresh), Figure)
+    random_agent = make_agent("random", env.obs_size, env.n_actions)
+    assert policy_map(env, random_agent) is None
+    assert isinstance(policy_map_figure(env, random_agent), Figure)
+
+
+def test_policy_map_covers_every_open_cell_for_dqn():
+    env = make_env("maze")
+    env.reset(seed=0)
+    agent = make_agent("dqn", env.obs_size, env.n_actions, hidden=(16,))
+    pm = policy_map(env, agent)
+    assert pm["seen"].sum() == np.count_nonzero((env.grid != WALL) & (env.grid != GOAL))
+
+
+def test_maze_image_clicks_map_to_cells():
+    env = make_env("maze_hazards")
+    env.reset(seed=0)
+    img = maze_image(env.grid, env.start, cell_px=20)
+    h, w = env.grid.shape
+    assert img.shape == (h * 20, w * 20, 3) and img.dtype == np.uint8
+    for r, c in [(0, 0), env.goal, (h - 1, w - 1)]:
+        assert cell_at(c * 20 + 10, r * 20 + 10, env.grid.shape, 20) == (r, c)
+    assert tuple(img[env.goal[0] * 20 + 10, env.goal[1] * 20 + 10]) == (0, 0x83, 0)
+    assert cell_at(w * 20 + 1, 5, env.grid.shape, 20) is None

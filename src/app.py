@@ -4,8 +4,8 @@
     python -m src.app --share    # also prints a temporary public link (e.g. from Colab)
 
 Tabs: saved multi-seed results, live training, mistake history, step-by-step
-replay, Q-learning vs DQN race, greedy evaluation, checkpoints, and an About
-page. Each browser session has its own agent; nothing is shared between users.
+replay, policy map and maze editor, Q-learning vs DQN race, greedy evaluation,
+checkpoints, and an About page. Each browser session has its own agent; nothing is shared between users.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import itertools
 import tempfile
 import time
 from collections import deque
+from dataclasses import replace
 from pathlib import Path
 from typing import List, Optional
 
@@ -25,14 +26,16 @@ import numpy as np
 import pandas as pd
 
 from src import fun
-from src.envs import PRESETS, RewardConfig
+from src.envs import (EMPTY, GOAL, HAZARD, PRESETS, WALL, RewardConfig, check_layout,
+                      layout_to_ascii, parse_layout, shortest_path_length)
 from src.evaluation import (EXPERIMENTS, compare_agents, evaluate_agent, format_p,
                             load_experiment)
 from src.training import (TrainConfig, Trainer, build_env, compare_phases, load_agent)
-from src.visualization import (AGENT_COLORS, AGENT_LABELS, _agents_in, experiment_bars_figure,
-                               experiment_curves_figure, frame_figure, learning_curves_figure,
-                               maze_figure, mistake_heatmap_figure, mistake_types_figure,
-                               record_episode, reward_breakdown_figure)
+from src.visualization import (AGENT_COLORS, AGENT_LABELS, _agents_in, cell_at,
+                               experiment_bars_figure, experiment_curves_figure, frame_figure,
+                               learning_curves_figure, maze_figure, maze_image,
+                               mistake_heatmap_figure, mistake_types_figure, policy_map,
+                               policy_map_figure, record_episode, reward_breakdown_figure)
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
@@ -62,6 +65,10 @@ METRIC_CHOICES = [("Success rate", "success"), ("Path efficiency", "path_efficie
                   ("Mistakes per episode", "mistakes"), ("Steps", "steps"),
                   ("Total reward", "total_reward")]
 UNSEEN_BASE = 1000
+MY_MAZE = "My maze"
+CELL_PX = 36
+BRUSHES = [("⬛ Wall", "wall"), ("⬜ Empty", "empty"), ("🟥 Hazard", "hazard"),
+           ("🔵 Start", "start"), ("🟩 Goal", "goal")]
 MAX_EPISODES = {"random": 1000, "tabular_q": 2000, "dqn": 800, "dqn_per": 800,
                 "dqn_mistake": 800, "dqn_per_mistake": 800}
 
@@ -71,7 +78,7 @@ MAX_EPISODES = {"random": 1000, "tabular_q": 2000, "dqn": 800, "dqn_per": 800,
 # ---------------------------------------------------------------------------
 
 def new_session() -> dict:
-    return {"trainer": None, "frames": [], "replay_env": None,
+    return {"trainer": None, "frames": [], "replay_env": None, "editor": None,
             "commentary": deque(maxlen=14), "announced": set()}
 
 
@@ -167,13 +174,23 @@ def _commentary_text(state: dict) -> str:
     return "\n".join(reversed(state["commentary"])) or "The commentator is warming up."
 
 
-def train_agent_ui(preset, agent, episodes, seed, decay_pct, state):
+def train_agent_ui(preset, agent, episodes, seed, decay_pct, state, use_maze=False):
     state = state or new_session()
     episodes = int(min(int(episodes), MAX_EPISODES.get(agent, 1000)))
     kwargs = {} if agent == "random" else {
         "epsilon": {"decay_episodes": max(1, int(episodes * decay_pct / 100))}}
+    layout_text = None
+    if use_maze:
+        ed = _editor(state, preset)
+        problem = check_layout(ed["grid"], ed["start"], ed["goal"])
+        if problem:
+            yield (f"Can't train on your maze: {problem}. Fix it in the **🗺️ Policy map & "
+                   "editor** tab.", None, None, _commentary_text(state), _achievements_md([]),
+                   state)
+            return
+        layout_text = layout_to_ascii(ed["grid"], ed["start"], ed["goal"])
     config = TrainConfig(env_preset=preset, agent=agent, agent_kwargs=kwargs,
-                         episodes=episodes, seed=int(seed))
+                         episodes=episodes, seed=int(seed), layout_text=layout_text)
     trainer = Trainer(config)  # in memory; checkpoints are saved on request
     state.update(trainer=trainer, frames=[], replay_env=None)
     state["commentary"] = deque(maxlen=14)
@@ -261,10 +278,15 @@ def record_replay(state, layout_mode, layout_seed):
     if message:
         return None, message, gr.update(maximum=1, value=0), state
     trainer: Trainer = state["trainer"]
-    env = build_env(trainer.config)
-    ls = None
-    if layout_mode == "Unseen layout":
-        ls = UNSEEN_BASE + int(layout_seed)
+    env, ls = build_env(trainer.config), None
+    if layout_mode == MY_MAZE:
+        env, problem = _maze_env(state)
+        if problem:
+            return None, problem, gr.update(maximum=1, value=0), state
+    elif layout_mode == "Unseen layout":
+        env, ls = _unseen_env(trainer), UNSEEN_BASE + int(layout_seed)
+        if env is None:
+            return None, _NO_UNSEEN, gr.update(maximum=1, value=0), state
     frames = record_episode(env, trainer.agent, layout_seed=ls)
     state.update(frames=frames, replay_env=env)
     ep = frames[-1].get("episode") or {}
@@ -290,6 +312,192 @@ def play_replay(state, speed):
         fig, info = _frame_outputs(state, i)
         yield fig, info, gr.update(value=i)
         time.sleep(delay)
+
+
+# ---------------------------------------------------------------------------
+# Policy map and maze editor tab
+# ---------------------------------------------------------------------------
+
+_NO_UNSEEN = ("This agent was trained on your own maze, and its observations don't fit the "
+              "preset's generated layouts, so there are no unseen layouts to test it on.")
+
+
+def _unseen_env(trainer: Trainer):
+    """Environment that generates fresh layouts for this agent, or None.
+
+    An agent trained on a hand-drawn maze is tested on its preset's generated
+    layouts, which only works when the observation sizes match."""
+    if not trainer.config.layout_text:
+        return build_env(trainer.config)
+    env = build_env(replace(trainer.config, layout_text=None))
+    return env if env.obs_size == trainer.env.obs_size else None
+
+
+def _locked_shape(state: dict):
+    """Maze size the current agent can handle, or None if any size works.
+
+    Full-map observations have one input per cell, so the network only fits
+    mazes of its training size; local views work on any size."""
+    trainer = state.get("trainer")
+    if trainer is None or trainer.env.config.obs_mode != "grid":
+        return None
+    return trainer.env.grid.shape
+
+
+def _layout_of(env) -> dict:
+    return {"grid": env.grid.copy(), "start": env.start, "goal": env.goal}
+
+
+def _training_layout(state: dict, preset: str) -> dict:
+    trainer = state.get("trainer")
+    if trainer is None:
+        return _layout_of(_preview_env(preset))
+    env = build_env(trainer.config)
+    env.reset(seed=0)
+    return _layout_of(env)
+
+
+def _editor(state: dict, preset: str = "maze") -> dict:
+    """The session's hand-drawn maze; it starts as a copy of the training layout."""
+    if state.get("editor") is None:
+        state["editor"] = _training_layout(state, preset)
+    return state["editor"]
+
+
+def _editor_outputs(state: dict, note: str = ""):
+    ed = state["editor"]
+    grid, start, goal = ed["grid"], ed["start"], ed["goal"]
+    problem = check_layout(grid, start, goal)
+    lock = _locked_shape(state)
+    h, w = grid.shape
+    if problem:
+        status = f"⚠️ **Can't use this maze yet:** {problem}."
+    elif lock is not None and lock != grid.shape:
+        status = (f"⚠️ This maze is {h} × {w}, but the current agent sees the whole map and "
+                  f"only fits {lock[0]} × {lock[1]}. Press **Start from training layout** or "
+                  "**Blank maze**, or train a new agent on it.")
+    else:
+        status = (f"✅ **Ready.** {h} × {w}, shortest safe path "
+                  f"{shortest_path_length(grid, start, goal)} steps.")
+    if note:
+        status += f"\n\n{note}"
+    return maze_image(grid, start, CELL_PX), layout_to_ascii(grid, start, goal), status, state
+
+
+def editor_show(state, preset):
+    state = state or new_session()
+    _editor(state, preset)
+    return _editor_outputs(state)
+
+
+def editor_reset(state, preset, source):
+    state = state or new_session()
+    if source == "training":
+        state["editor"] = _training_layout(state, preset)
+        return _editor_outputs(state, "Copied the training layout.")
+    h, w = _locked_shape(state) or _preview_env(preset).grid.shape
+    grid = np.full((h, w), WALL, dtype=np.int8)
+    grid[1:-1, 1:-1] = EMPTY
+    goal = (h - 2, w - 2)
+    grid[goal] = GOAL
+    state["editor"] = {"grid": grid, "start": (1, 1), "goal": goal}
+    return _editor_outputs(state, "Blank maze: walls around the edge, start top-left, goal "
+                                  "bottom-right.")
+
+
+def editor_click(state, brush, evt: gr.SelectData):
+    state = state or new_session()
+    ed = _editor(state)
+    cell = cell_at(evt.index[0], evt.index[1], ed["grid"].shape, CELL_PX)
+    if cell is None:
+        return _editor_outputs(state)
+    grid, note = ed["grid"], ""
+    if brush in ("start", "goal"):
+        other = ed["goal"] if brush == "start" else ed["start"]
+        if cell == other:
+            note = "Start and goal can't share a cell."
+        elif brush == "start":
+            grid[cell] = EMPTY
+            ed["start"] = cell
+        else:
+            grid[ed["goal"]] = EMPTY
+            grid[cell] = GOAL
+            ed["goal"] = cell
+    elif cell in (ed["start"], ed["goal"]):
+        note = "To move the start or goal, paint it somewhere else."
+    else:
+        grid[cell] = {"wall": WALL, "empty": EMPTY, "hazard": HAZARD}[brush]
+    return _editor_outputs(state, note)
+
+
+def editor_import(state, text):
+    state = state or new_session()
+    try:
+        grid, start, goal = parse_layout(text or "")
+    except ValueError as exc:
+        _editor(state)
+        return _editor_outputs(state)[0], text, f"⚠️ **Could not read that text:** {exc}.", state
+    state["editor"] = {"grid": grid, "start": start, "goal": goal}
+    return _editor_outputs(state, "Loaded the maze from text.")
+
+
+def _maze_env(state: dict):
+    """(environment on the editor's maze for the current agent, problem message)."""
+    trainer: Trainer = state["trainer"]
+    ed = _editor(state, trainer.config.env_preset)
+    problem = check_layout(ed["grid"], ed["start"], ed["goal"])
+    if problem:
+        return None, f"Your maze can't be used yet: {problem}."
+    text = layout_to_ascii(ed["grid"], ed["start"], ed["goal"])
+    env = build_env(replace(trainer.config, layout_text=text))
+    if env.obs_size != trainer.env.obs_size:
+        lock = _locked_shape(state)
+        return None, (f"This agent sees the whole map and was trained on "
+                      f"{lock[0]} × {lock[1]} mazes, so it can't read a "
+                      f"{ed['grid'].shape[0]} × {ed['grid'].shape[1]} one. Resize your maze or "
+                      "train an agent on it (tick **Train on my maze** in the Train tab).")
+    env.reset(seed=0)
+    return env, None
+
+
+def policy_map_ui(state, target):
+    state = state or new_session()
+    message = _need_trainer(state)
+    if message:
+        return None, message
+    trainer: Trainer = state["trainer"]
+    if target == MY_MAZE:
+        env, problem = _maze_env(state)
+        if problem:
+            return None, problem
+        where = "your maze"
+    else:
+        env = build_env(trainer.config)
+        env.reset(seed=0)
+        where = "its training layout"
+    agent_name = trainer.config.agent
+    title = f"{AGENT_LABELS[agent_name]} on {where} after {trainer.episodes_done} episodes"
+    fig = policy_map_figure(env, trainer.agent, title=title)
+    pm = policy_map(env, trainer.agent)
+    if pm is None:
+        return fig, (f"**{fun.NICKNAMES[agent_name]}** picks moves at random: there is no "
+                     "policy to draw.")
+    n_open = int(np.count_nonzero((env.grid != WALL) & (env.grid != GOAL)))
+    n_seen = int(pm["seen"].sum())
+    if agent_name == "tabular_q":
+        note = (f"It has a learned value for **{n_seen} of {n_open}** open cells. Grey dots are "
+                "states it never visited: there it has nothing to go on and moves at random.")
+        if n_seen == 0 and env.config.obs_mode == "grid":
+            note += (" Its state is the **whole map**, so changing even one cell makes every "
+                     "state new to it: a table can't transfer anything to a different maze.")
+    else:
+        note = ("A network answers for every cell, including ones it never visited, so "
+                "arrows far from where it trained are guesses, not knowledge.")
+    if target == MY_MAZE and not trainer.config.layout_text:
+        note += (" It never trained on your maze: follow the arrows from the start ring "
+                 "to see whether its habits transfer, or watch it in **🎬 Watch it play**.")
+    return fig, (f"**{fun.NICKNAMES[agent_name]}**: the move it would make on each cell with "
+                 f"exploration off. {note}")
 
 
 # ---------------------------------------------------------------------------
@@ -346,10 +554,12 @@ def evaluate_ui(state, train_episodes, n_unseen):
     train_res = evaluate_agent(trainer.agent, env, layout_seeds=pool,
                                episodes=int(train_episodes), seed=seed)
     splits = [("training layout(s)", train_res)]
-    if int(n_unseen) > 0:
+    unseen_env = _unseen_env(trainer)
+    if int(n_unseen) > 0 and unseen_env is not None:
         unseen = list(range(UNSEEN_BASE, UNSEEN_BASE + int(n_unseen)))
         splits.append((f"{len(unseen)} unseen layouts",
-                       evaluate_agent(trainer.agent, env, layout_seeds=unseen, seed=seed)))
+                       evaluate_agent(trainer.agent, unseen_env, layout_seeds=unseen,
+                                      seed=seed)))
     for label, res in splits:
         rows.append({"evaluated on": label, "episodes": res["n_episodes"],
                      "success": round(res["success"], 3),
@@ -361,6 +571,10 @@ def evaluate_ui(state, train_episodes, n_unseen):
             "so poor results on unseen layouts are expected: that is what the "
             "`generalization` experiment measures."
             if not pool else "Greedy evaluation (exploration off).")
+    if trainer.config.layout_text:
+        note = ("Greedy evaluation (exploration off) on your own maze; unseen layouts are "
+                f"the `{trainer.config.env_preset}` preset's generated ones. "
+                + ("" if unseen_env is not None else _NO_UNSEEN))
     return (f"**{fun.NICKNAMES[trainer.config.agent]}** after {trainer.episodes_done} "
             f"episodes. {note}"), pd.DataFrame(rows)
 
@@ -394,8 +608,9 @@ def load_checkpoint_ui(file, state):
     trainer = Trainer(config)
     trainer.load_checkpoint(path)
     state.update(trainer=trainer, frames=[], replay_env=None)
+    where = " (your own maze)" if config.layout_text else ""
     return (f"Loaded **{AGENT_LABELS[config.agent]} ({fun.NICKNAMES[config.agent]})** on "
-            f"`{config.env_preset}` after **{trainer.episodes_done}** episodes. Training can "
+            f"`{config.env_preset}`{where} after **{trainer.episodes_done}** episodes. Training can "
             f"continue from here; the episode log starts empty."), state
 
 
@@ -407,6 +622,7 @@ CSS = """
 .gradio-container { max-width: 1200px !important; margin: auto; }
 #hero h1 { margin-bottom: 0.2rem; }
 #hero p { color: var(--body-text-color-subdued); margin-top: 0; }
+#maze-text textarea { font-family: ui-monospace, Consolas, monospace; line-height: 1.25; }
 """
 
 ABOUT = f"""
@@ -488,6 +704,9 @@ def build_app() -> gr.Blocks:
                     seed = gr.Number(value=0, precision=0, label="Seed")
                     decay = gr.Slider(10, 100, value=75, step=5,
                                       label="Exploration decays over (% of episodes)")
+                    use_maze = gr.Checkbox(value=False, label="Train on my maze",
+                                           info="Draw it in the 🗺️ tab. The environment "
+                                                "above still sets the rules.")
                     with gr.Row():
                         train_btn = gr.Button("Train", variant="primary")
                         stop_btn = gr.Button("Stop", variant="stop")
@@ -505,7 +724,7 @@ def build_app() -> gr.Blocks:
             demo.load(lambda p: maze_figure(_preview_env(p), title=f"{p} layout"),
                       preset, preview)
             train_event = train_btn.click(
-                train_agent_ui, [preset, agent, episodes, seed, decay, state],
+                train_agent_ui, [preset, agent, episodes, seed, decay, state, use_maze],
                 [status, curve_plot, types_plot, commentary, achievements_md, state])
             stop_btn.click(None, None, None, cancels=[train_event])
 
@@ -534,7 +753,7 @@ def build_app() -> gr.Blocks:
             gr.Markdown("Records one **greedy** episode, then replays it step by step with the "
                         "agent's Q-values for each move.")
             with gr.Row():
-                layout_mode = gr.Radio(["Training layout", "Unseen layout"],
+                layout_mode = gr.Radio(["Training layout", "Unseen layout", MY_MAZE],
                                        value="Training layout", label="Layout")
                 unseen_seed = gr.Number(value=0, precision=0,
                                         label=f"Unseen layout number (seed {UNSEEN_BASE} + n)")
@@ -549,6 +768,43 @@ def build_app() -> gr.Blocks:
                              [frame_plot, frame_md, step_slider, state])
             step_slider.release(scrub_replay, [state, step_slider], [frame_plot, frame_md])
             play_btn.click(play_replay, [state, speed], [frame_plot, frame_md, step_slider])
+
+        with gr.Tab("🗺️ Policy map & editor"):
+            gr.Markdown("Draw a maze by clicking cells, then see which way the agent would go "
+                        "on every cell. Test it on your maze in **🎬 Watch it play** or train "
+                        "a new agent on it in **🏋️ Train**.")
+            with gr.Row():
+                with gr.Column(scale=1, min_width=300):
+                    gr.Markdown("### Draw a maze")
+                    brush = gr.Radio(BRUSHES, value="wall", label="Brush: click a cell to paint")
+                    maze_img = gr.Image(show_label=False, interactive=False, type="numpy",
+                                        format="png", elem_id="maze-editor")
+                    editor_md = gr.Markdown()
+                    with gr.Row():
+                        from_train_btn = gr.Button("Start from training layout")
+                        blank_btn = gr.Button("Blank maze")
+                    ascii_box = gr.Textbox(label="Maze as text: # wall · . empty · H hazard · "
+                                                 "S start · G goal", lines=9, max_lines=25,
+                                           elem_id="maze-text")
+                    import_btn = gr.Button("Load text into the editor")
+                with gr.Column(scale=1, min_width=300):
+                    gr.Markdown("### The agent's policy")
+                    with gr.Row():
+                        map_target = gr.Radio([MY_MAZE, "Training layout"], value=MY_MAZE,
+                                              label="Show the policy on")
+                        map_btn = gr.Button("Show policy map", variant="primary")
+                    map_plot = gr.Plot(show_label=False)
+                    map_md = gr.Markdown(_need_trainer(new_session()))
+            editor_outputs = [maze_img, ascii_box, editor_md, state]
+            maze_img.select(editor_click, [state, brush], editor_outputs)
+            from_train_btn.click(lambda s, p: editor_reset(s, p, "training"), [state, preset],
+                                 editor_outputs)
+            blank_btn.click(lambda s, p: editor_reset(s, p, "blank"), [state, preset],
+                            editor_outputs)
+            import_btn.click(editor_import, [state, ascii_box], editor_outputs)
+            map_btn.click(policy_map_ui, [state, map_target], [map_plot, map_md])
+            demo.load(editor_show, [state, preset], editor_outputs)
+            train_event.then(editor_show, [state, preset], editor_outputs)
 
         with gr.Tab("⚔️ Q-learning vs DQN"):
             gr.Markdown(f"A live race: **{fun.NICKNAMES['tabular_q']}** vs "

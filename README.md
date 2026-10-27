@@ -92,12 +92,17 @@ For a CPU-only PyTorch (smaller download), install it first with `pip install to
 | 📊 Results | Every saved experiment: bar charts and greedy learning curves with 95% CIs, tables, permutation tests with verdicts |
 | 🏋️ Train | Train any agent on any environment with live learning curves, commentary and achievements |
 | 🔥 Mistake history | Early-vs-late mistake heatmap, reward breakdown, the Hall of Shame, the full mistake log |
-| 🎬 Watch it play | Record a greedy episode and replay it step by step with the agent's Q-values, on the training layout or an unseen one |
+| 🎬 Watch it play | Record a greedy episode and replay it step by step with the agent's Q-values, on the training layout, an unseen one or your own maze |
+| 🗺️ Policy map & editor | Draw a maze by clicking cells (or paste it as text) and see the move the agent would make on every cell; tick **Train on my maze** in the Train tab to train on it |
 | ⚔️ Q-learning vs DQN | Train both live on the same environment and seed |
 | ✅ Evaluate | Greedy evaluation on the training layout and on unseen layouts |
 | 💾 Checkpoints | Download the trained agent, or upload a checkpoint (loaded in PyTorch's safe mode) |
 
 ![Step-by-step replay with Q-values](docs/figures/replay_frame.png)
+
+![Policy map: the greedy move on every cell, shaded by the agent's best Q-value](docs/figures/policy_map.png)
+
+The policy map shows a tabular agent's arrows only on states it visited; elsewhere it has learned nothing and a grey dot says so. Because its state is the whole map, changing even one cell of a maze makes every state new to it. A DQN draws an arrow everywhere, but arrows on cells it never visited are guesses.
 
 ## Command line
 
@@ -160,10 +165,10 @@ src/
   replay.py         uniform and prioritized replay buffers (sum tree)
   training.py       Trainer: logs, checkpoints, exact resumption, CLI
   evaluation.py     greedy evaluation, multi-seed experiments, statistics, CLI
-  visualization.py  every chart, episode replays, report figures
+  visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              197 tests (pytest); `-m "not slow"` skips one long training test
+tests/              216 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report

@@ -28,7 +28,8 @@ import numpy as np
 import torch
 
 from src.agents import DQN_NICKNAMES, DQNAgent, EpsilonSchedule, make_agent
-from src.envs import EnvConfig, GridWorld, PRESETS, RewardConfig
+from src.envs import (EnvConfig, GridWorld, PRESETS, RewardConfig, check_layout,
+                      parse_layout)
 
 PathLike = Union[str, Path]
 
@@ -134,7 +135,9 @@ class TrainConfig:
 
     env_overrides replace EnvConfig fields of the preset (a "rewards" dict becomes
     a RewardConfig). agent_kwargs go to make_agent (an "epsilon" dict becomes an
-    EpsilonSchedule).
+    EpsilonSchedule). layout_text, if set, is a hand-drawn maze (see
+    GridWorld.from_ascii) used instead of the preset's generated layouts; the
+    preset still supplies everything else (observation mode, rewards, limits).
     """
 
     env_preset: str = "maze"
@@ -145,6 +148,7 @@ class TrainConfig:
     seed: int = 0
     checkpoint_every: int = 50
     save_buffer: bool = True        # DQN: store replay buffer for exact resumption
+    layout_text: Optional[str] = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -163,6 +167,12 @@ def build_env(config: TrainConfig) -> GridWorld:
     if isinstance(overrides.get("layout_pool"), list):
         overrides["layout_pool"] = tuple(overrides["layout_pool"])
     env_config = EnvConfig(**{**PRESETS[config.env_preset], **overrides})
+    if config.layout_text:
+        grid, start, goal = parse_layout(config.layout_text)
+        problem = check_layout(grid, start, goal)
+        if problem:
+            raise ValueError(f"layout_text: {problem}")
+        return GridWorld.from_ascii(config.layout_text, env_config, seed=config.seed)
     return GridWorld(env_config, seed=config.seed)
 
 

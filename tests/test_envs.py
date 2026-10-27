@@ -2,7 +2,8 @@ import numpy as np
 import pytest
 
 from src.envs import (EMPTY, GOAL, HAZARD, PRESETS, WALL, EnvConfig, GridWorld,
-                      RewardConfig, generate_layout, make_env, shortest_path_length)
+                      RewardConfig, check_layout, generate_layout, layout_to_ascii, make_env,
+                      parse_layout, shortest_path_length)
 
 UP, RIGHT, DOWN, LEFT = 0, 1, 2, 3
 RW = RewardConfig()
@@ -257,3 +258,42 @@ def test_random_rollouts_respect_limits(preset):
         summary = info["episode"]
         assert summary["steps"] <= 50
         assert summary["success"] or summary["timeout"] or summary["hazards"] > 0
+
+
+# -- hand-drawn layouts ------------------------------------------------------------
+
+@pytest.mark.parametrize("obs_mode", ["grid", "local"])
+def test_observation_at_matches_walking_there(obs_mode):
+    walker, probe = small_env(obs_mode=obs_mode), small_env(obs_mode=obs_mode)
+    walker.reset(seed=0)
+    probe.reset(seed=0)
+    obs, *_ = walker.step(RIGHT)
+    assert np.array_equal(probe.observation_at((1, 2)), obs)
+    assert probe.pos == (1, 1) and probe.steps == 0 and probe.visited == {(1, 1)}
+
+
+def test_ascii_round_trip():
+    env = make_env("maze_hazards")
+    env.reset(seed=0)
+    copy = GridWorld.from_ascii(env.to_ascii())
+    copy.reset(seed=0)
+    assert np.array_equal(copy.grid, env.grid)
+    assert (copy.start, copy.goal) == (env.start, env.goal)
+    assert layout_to_ascii(*parse_layout(SMALL)) == SMALL.strip()
+
+
+@pytest.mark.parametrize("text", ["#S.#\n#..G#", "#S.S#\n#..G#", "#S..#\n#...#",
+                                  "#S.X#\n#..G#", ""])
+def test_parse_layout_rejects_bad_text(text):
+    with pytest.raises(ValueError):
+        parse_layout(text)
+
+
+def test_check_layout():
+    assert check_layout(*parse_layout(SMALL)) is None
+    walled = parse_layout("#####\n#S#G#\n#####")
+    only_via_hazard = parse_layout("#####\n#SHG#\n#####")
+    assert "can't be reached" in check_layout(*walled)
+    assert "can't be reached" in check_layout(*only_via_hazard)
+    grid, start, _ = parse_layout(SMALL)
+    assert "different" in check_layout(grid, start, start)

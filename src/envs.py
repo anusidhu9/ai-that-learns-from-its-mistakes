@@ -233,6 +233,64 @@ def generate_layout(config: EnvConfig, layout_seed: int) -> Tuple[np.ndarray, Po
 
 
 # ---------------------------------------------------------------------------
+# Text layouts (hand-drawn mazes)
+# ---------------------------------------------------------------------------
+
+ASCII_CODES = {"#": WALL, ".": EMPTY, "H": HAZARD, "S": EMPTY, "G": GOAL}
+
+
+def parse_layout(text: str) -> Tuple[np.ndarray, Pos, Pos]:
+    """(grid, start, goal) from text: '#' wall, '.' empty, 'H' hazard,
+    'S' start, 'G' goal. Rows must have equal length."""
+    rows = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    if not rows:
+        raise ValueError("layout is empty")
+    if len({len(r) for r in rows}) != 1:
+        raise ValueError("all rows must have the same length")
+    grid = np.zeros((len(rows), len(rows[0])), dtype=np.int8)
+    starts, goals = [], []
+    for r, row in enumerate(rows):
+        for c, ch in enumerate(row):
+            if ch not in ASCII_CODES:
+                raise ValueError(f"unknown character {ch!r} at row {r}, col {c}")
+            grid[r, c] = ASCII_CODES[ch]
+            if ch == "S":
+                starts.append((r, c))
+            elif ch == "G":
+                goals.append((r, c))
+    if len(starts) != 1 or len(goals) != 1:
+        raise ValueError(f"layout needs exactly one 'S' and one 'G' "
+                         f"(found {len(starts)} and {len(goals)})")
+    return grid, starts[0], goals[0]
+
+
+def layout_to_ascii(grid: np.ndarray, start: Pos, goal: Pos) -> str:
+    """Inverse of parse_layout."""
+    chars = {EMPTY: ".", WALL: "#", HAZARD: "H", GOAL: "G"}
+    rows = [[chars[int(v)] for v in row] for row in grid]
+    rows[start[0]][start[1]] = "S"
+    rows[goal[0]][goal[1]] = "G"
+    return "\n".join("".join(row) for row in rows)
+
+
+def check_layout(grid: np.ndarray, start: Pos, goal: Pos) -> Optional[str]:
+    """Why a hand-drawn layout can't be used, or None if it is fine.
+
+    Same rule as generated layouts: the goal must be reachable without
+    stepping on a hazard, so success and path efficiency are well defined."""
+    h, w = grid.shape
+    if h < 3 or w < 3:
+        return "the maze must be at least 3 x 3"
+    if start == goal:
+        return "start and goal must be different cells"
+    if grid[start] != EMPTY:
+        return "the start must be on an empty cell"
+    if shortest_path_length(grid, start, goal, avoid_hazards=True) is None:
+        return "the goal can't be reached from the start without crossing a wall or hazard"
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
 
@@ -266,24 +324,8 @@ class GridWorld:
                    seed: Optional[int] = None) -> "GridWorld":
         """Build a fixed layout from text: '#' wall, '.' empty, 'H' hazard,
         'S' start, 'G' goal. Rows must have equal length."""
-        rows = [line.strip() for line in text.strip().splitlines() if line.strip()]
-        if len({len(r) for r in rows}) != 1:
-            raise ValueError("all rows must have the same length")
-        h, w = len(rows), len(rows[0])
-        codes = {"#": WALL, ".": EMPTY, "H": HAZARD, "S": EMPTY, "G": GOAL}
-        grid = np.zeros((h, w), dtype=np.int8)
-        start = goal = None
-        for r, row in enumerate(rows):
-            for c, ch in enumerate(row):
-                if ch not in codes:
-                    raise ValueError(f"unknown character {ch!r} at row {r}, col {c}")
-                grid[r, c] = codes[ch]
-                if ch == "S":
-                    start = (r, c)
-                elif ch == "G":
-                    goal = (r, c)
-        if start is None or goal is None:
-            raise ValueError("layout needs exactly one 'S' and one 'G'")
+        grid, start, goal = parse_layout(text)
+        h, w = grid.shape
         base = config if config is not None else EnvConfig()
         # "open" skips the odd-size check; the layout itself is fixed.
         env = cls(replace(base, height=h, width=w, layout="open"), seed=seed)
@@ -396,6 +438,22 @@ class GridWorld:
             "mistakes": s["collision"] + s["hazard"] + s["revisit"] + s["timeout"],
             "optimal_length": self.optimal_length,
         }
+
+    def to_ascii(self) -> str:
+        """The current layout as text that from_ascii() reads back."""
+        return layout_to_ascii(self.grid, self.start, self.goal)
+
+    def observation_at(self, pos: Pos) -> np.ndarray:
+        """What the agent would observe standing on `pos` in the current
+        layout. The episode (position, steps, visited cells) is unchanged."""
+        if self.grid is None:
+            raise RuntimeError("call reset() first")
+        saved = self.pos
+        self.pos = (int(pos[0]), int(pos[1]))
+        try:
+            return self._observe()
+        finally:
+            self.pos = saved
 
     def render_text(self) -> str:
         """ASCII picture: '#' wall, '.' empty, 'H' hazard, 'G' goal, 'A' agent."""

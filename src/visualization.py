@@ -156,6 +156,108 @@ def maze_figure(env: GridWorld, path=None, title: str = "", color: str = "#2a78d
     return fig
 
 
+# ---------------------------------------------------------------------------
+# Policy map and maze editor image
+# ---------------------------------------------------------------------------
+
+ARROWS = ("↑", "→", "↓", "←")  # same order as ACTION_NAMES
+TIE_TOL = 1e-9
+
+
+def policy_map(env: GridWorld, agent) -> Optional[dict]:
+    """The agent's greedy choice on every open cell of env's current layout.
+
+    Returns arrays shaped like the grid: `action` (-1 where there is no
+    arrow), `value` (best Q-value, NaN where not shown), `seen` (False for
+    states a tabular agent never visited: its zeros there are not knowledge)
+    and `tie` (several actions share the best value, so greedy play picks
+    one at random). None for agents without Q-values (random).
+    """
+    if not hasattr(agent, "q_values"):
+        return None
+    shape = env.grid.shape
+    out = {"action": np.full(shape, -1), "value": np.full(shape, np.nan),
+           "seen": np.zeros(shape, dtype=bool), "tie": np.zeros(shape, dtype=bool)}
+    table = getattr(agent, "q", None)  # tabular agents keep a dict of visited states
+    for r, c in np.argwhere((env.grid != WALL) & (env.grid != GOAL)):
+        obs = env.observation_at((r, c))
+        if isinstance(table, dict) and agent.key(obs) not in table:
+            continue
+        q = np.asarray(agent.q_values(obs), dtype=float)
+        best = q.max()
+        out["seen"][r, c] = True
+        out["value"][r, c] = best
+        out["tie"][r, c] = np.count_nonzero(q >= best - TIE_TOL) > 1
+        out["action"][r, c] = int(np.argmax(q))
+    return out
+
+
+def policy_map_figure(env: GridWorld, agent, title: str = "") -> Figure:
+    """Arrows for the greedy action on every open cell, shaded by its value."""
+    fig, axes = _figure(5.4, 5.0)
+    ax = axes[0, 0]
+    pm = policy_map(env, agent)
+    if pm is None:
+        _empty(ax, "This agent has no Q-values, so it has no policy to draw")
+        return fig
+    draw_grid(ax, env.grid, start=env.start, title=title or "What the agent would do on each cell")
+    value = np.ma.masked_invalid(pm["value"])
+    mid = np.inf  # every arrow dark ink unless some cells have values
+    if value.count():
+        lo, hi = float(value.min()), float(value.max())
+        hi = hi if hi > lo else lo + 1e-6
+        image = ax.imshow(value, cmap=HEAT_CMAP, vmin=lo, vmax=hi, interpolation="nearest")
+        bar = fig.colorbar(image, ax=ax, shrink=0.75, pad=0.02)
+        bar.set_label("best Q-value (darker = agent expects more reward)", color=MUTED, fontsize=8)
+        bar.ax.tick_params(labelsize=8, colors=MUTED)
+        bar.outline.set_visible(False)
+        mid = (lo + hi) / 2
+    for r, c in np.argwhere(env.grid == HAZARD):
+        ax.add_patch(Rectangle((c - 0.45, r - 0.45), 0.9, 0.9, fill=False,
+                               edgecolor=CELL_COLORS[HAZARD], linewidth=2))
+    for r, c in np.argwhere((env.grid != WALL) & (env.grid != GOAL)):
+        if not pm["seen"][r, c]:
+            ax.scatter([c], [r], s=18, color=MUTED, zorder=3)
+            continue
+        ink = "white" if pm["value"][r, c] > mid else INK
+        symbol = "?" if pm["tie"][r, c] else ARROWS[pm["action"][r, c]]
+        ax.text(c, r, symbol, ha="center", va="center", fontsize=13, fontweight="bold",
+                color=ink, zorder=4)
+    ax.set_xlabel("arrow = greedy move · ? = tie (random pick)\n"
+                  "grey dot = never visited · red outline = hazard", fontsize=8, color=MUTED)
+    return fig
+
+
+def maze_image(grid: np.ndarray, start, cell_px: int = 36) -> np.ndarray:
+    """RGB picture of a layout with exactly `cell_px` pixels per cell, so a
+    click at pixel (x, y) is cell (y // cell_px, x // cell_px). The start is
+    a blue disc; the goal is the green cell."""
+    def rgb(hex_color: str) -> np.ndarray:
+        return np.array([int(hex_color[i:i + 2], 16) for i in (1, 3, 5)], dtype=np.uint8)
+
+    h, w = grid.shape
+    img = np.empty((h * cell_px, w * cell_px, 3), dtype=np.uint8)
+    for code, color in CELL_COLORS.items():
+        mask = np.kron(grid == code, np.ones((cell_px, cell_px), dtype=bool))
+        img[mask] = rgb(color)
+    img[::cell_px, :] = rgb(GRIDLINE)
+    img[:, ::cell_px] = rgb(GRIDLINE)
+    yy, xx = np.mgrid[:cell_px, :cell_px]
+    centre = (cell_px - 1) / 2
+    disc = (yy - centre) ** 2 + (xx - centre) ** 2 <= (cell_px * 0.32) ** 2
+    r, c = start
+    img[r * cell_px:(r + 1) * cell_px, c * cell_px:(c + 1) * cell_px][disc] = rgb("#2a78d6")
+    return img
+
+
+def cell_at(x: int, y: int, shape, cell_px: int = 36) -> Optional[tuple]:
+    """Grid cell under pixel (x, y) of a maze_image, or None if outside."""
+    r, c = int(y) // cell_px, int(x) // cell_px
+    if 0 <= r < shape[0] and 0 <= c < shape[1]:
+        return r, c
+    return None
+
+
 def mistake_heatmap_figure(grid: np.ndarray, mistakes: List[dict], early: range,
                            late: range, start=None) -> Figure:
     """Mistakes per episode at each cell, early vs late training, on one shared scale."""
@@ -452,7 +554,7 @@ def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int
     """Regenerate every figure used in README.md and REPORT.md.
 
     Multi-seed charts come from the saved results; the single-run charts
-    (heatmap, reward breakdown, replay) come from a fresh, seeded 400-episode
+    (heatmap, reward breakdown, replay, policy map) come from a fresh, seeded 400-episode
     tabular Q run on the fixed maze, so they are reproducible.
     """
     from pathlib import Path
@@ -493,6 +595,8 @@ def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int
     save(reward_breakdown_figure(h), "reward_breakdown.png")
     frames = record_episode(env, trainer.agent)
     save(frame_figure(env, frames, 5, AGENT_COLORS["tabular_q"]), "replay_frame.png")
+    save(policy_map_figure(env, trainer.agent, title="Tabular Q after 400 episodes"),
+         "policy_map.png")
     return saved
 
 

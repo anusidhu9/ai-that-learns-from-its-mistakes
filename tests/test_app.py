@@ -86,3 +86,56 @@ def test_header_shows_code_version(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "RESULTS_DIR", tmp_path / "results")
     (tmp_path / "VERSION").write_text("abc1234 (2026-10-14)\n")
     assert app.code_version() == "abc1234 (2026-10-14)"
+
+
+# -- policy map and maze editor ------------------------------------------------------
+
+class Click:
+    """Stand-in for gr.SelectData: only .index ([x, y] in pixels) is used."""
+
+    def __init__(self, row, col):
+        self.index = [col * app.CELL_PX + 5, row * app.CELL_PX + 5]
+
+
+def test_editor_and_policy_map_on_my_maze(session):
+    session["editor"] = None
+    image, text, status, state = app.editor_show(session, "maze")
+    assert image.shape[:2] == (9 * app.CELL_PX, 9 * app.CELL_PX)
+    assert "Ready" in status and text.count("S") == 1 and text.count("G") == 1
+    start = state["editor"]["start"]
+    assert "somewhere else" in app.editor_click(state, "wall", Click(*start))[2]
+    _, text, status, state = app.editor_click(state, "goal", Click(1, 3))
+    assert state["editor"]["goal"] == (1, 3) and text.count("G") == 1
+    fig, message = app.policy_map_ui(state, app.MY_MAZE)
+    assert fig is not None and "learned value" in message and "never trained" in message
+    assert "Episode result" in app.record_replay(state, app.MY_MAZE, 0)[1]
+    assert app.policy_map_ui(state, "Training layout")[0] is not None
+
+
+def test_editor_rejects_bad_mazes(session):
+    _, _, status, state = app.editor_import(session, "#S.\n#.")
+    assert "Could not read" in status
+    _, _, status, state = app.editor_import(state, "#####\n#S#G#\n#####")
+    assert "Can't use this maze" in status
+    assert "can't be used" in app.policy_map_ui(state, app.MY_MAZE)[1]
+    _, _, status, state = app.editor_import(state, "#####\n#S.G#\n#####")
+    assert "only fits 9 × 9" in status
+    assert "can't read" in app.policy_map_ui(state, app.MY_MAZE)[1]
+    assert "Blank maze" in app.editor_reset(state, "maze", "blank")[2]
+    assert state["editor"]["grid"].shape == (9, 9)
+
+
+def test_train_on_my_maze():
+    state = app.new_session()
+    app.editor_import(state, "#####\n#S#G#\n#####")
+    last = list(app.train_agent_ui("maze", "tabular_q", 20, 0, 75, state, True))[-1]
+    assert "Can't train on your maze" in last[0] and state["trainer"] is None
+    app.editor_import(state, "#######\n#S....#\n#.###.#\n#....G#\n#######")
+    for last in app.train_agent_ui("maze", "tabular_q", 50, 0, 75, state, True):
+        pass
+    assert "Training finished" in last[0]
+    assert state["trainer"].env.grid.shape == (5, 7)
+    message, table = app.evaluate_ui(state, 3, 5)
+    assert list(table["evaluated on"]) == ["training layout(s)"]
+    assert "no unseen layouts" in message
+    assert "trained on your own maze" in app.record_replay(state, "Unseen layout", 0)[1]
