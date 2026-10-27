@@ -2,6 +2,19 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Dueling DQN and n-step returns (Stage D)
+
+**Added**
+- DQN options `dueling` (value and advantage heads, `Q = V + A − mean(A)`) and `n_step` (learn from the discounted sum of the next n rewards, bootstrapping with γⁿ; shorter tails at the end of an episode, which still bootstrap after a timeout). Off by default (`dueling=False`, `n_step=1`); then the network is built and trained exactly as before (checked: identical initial weights and training trajectory, and `hazard_maze` reproduced for DQN and DQN + PER, seeds 0–1).
+- Agents `dqn_dueling`, `dqn_nstep` (n = 3) and `dqn_dueling_nstep`, with nicknames, in the dashboard's Train tab and About page, and chart styles (dashed, dense-dot and dash-dot-dot lines; diamond, down-triangle and plus markers; their own hatches).
+- Replay buffers store a per-transition bootstrap discount. Buffers and checkpoints saved before this still load. n-step returns combined with mistake replay are refused with a clear error, because it is undefined which of the n steps made the mistake.
+- Experiments `dqn_variants_speed` and `dqn_variants_generalization`, pre-registered in `results/dqn_variants_speed/PROTOCOL.md` with fresh seeds (300–309) and layouts (8000–8249). Results, analyses, two figures, README and REPORT section 6.9.
+- 16 tests (243 in total): the dueling combination, defaults reproducing the old agent, hand-computed 3-step transitions for episodes ending at the goal and by timeout, the n-step learning target, PER with n-step, checkpoints old and new, each variant solving a corridor, and the dashboard.
+
+**Results**
+- `dqn_variants_speed`: 3-step returns made DQN learn the maze much faster (learning speed 0.369 → 0.863, Holm-corrected p = 0.0003, ahead in all 10 seeds); dueling made no measurable difference (0.338, p = 0.82).
+- `dqn_variants_generalization`: on 50 held-out mazes, dueling 0.39 and 3-step 0.40 against 0.36 for DQN (Holm-corrected p = 0.93 each): no evidence of a difference.
+
 ## Reward shaping (Stage C)
 
 **Added**

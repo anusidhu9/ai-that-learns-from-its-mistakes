@@ -58,8 +58,8 @@ def code_version() -> str:
         return "unknown"
 
 AGENT_CHOICES = [(f"{AGENT_LABELS[a]} ({fun.NICKNAMES[a]})", a)
-                 for a in ("tabular_q", "dqn", "dqn_per", "dqn_mistake", "dqn_per_mistake",
-                           "random")]
+                 for a in ("tabular_q", "dqn", "dqn_dueling", "dqn_nstep", "dqn_dueling_nstep",
+                           "dqn_per", "dqn_mistake", "dqn_per_mistake", "random")]
 PRESET_CHOICES = list(PRESETS)
 METRIC_CHOICES = [("Success rate", "success"), ("Path efficiency", "path_efficiency"),
                   ("Mistakes per episode", "mistakes"), ("Steps", "steps"),
@@ -71,7 +71,8 @@ CELL_PX = 36
 BRUSHES = [("⬛ Wall", "wall"), ("⬜ Empty", "empty"), ("🟥 Hazard", "hazard"),
            ("🔵 Start", "start"), ("🟩 Goal", "goal")]
 MAX_EPISODES = {"random": 1000, "tabular_q": 2000, "dqn": 800, "dqn_per": 800,
-                "dqn_mistake": 800, "dqn_per_mistake": 800}
+                "dqn_mistake": 800, "dqn_per_mistake": 800, "dqn_dueling": 800,
+                "dqn_nstep": 800, "dqn_dueling_nstep": 800}
 
 
 # ---------------------------------------------------------------------------
@@ -663,7 +664,8 @@ result is the task's. Whether it actually helps is tested in the `shaping_speed`
 | Agent | Nickname | In one line |
 |---|---|---|
 """ + "\n".join(f"| {AGENT_LABELS[a]} | {fun.NICKNAMES[a]} | {fun.TAGLINES[a]} |"
-                for a in ("random", "tabular_q", "dqn", "dqn_per", "dqn_mistake", "dqn_per_mistake")) + """
+                for a in ("random", "tabular_q", "dqn", "dqn_dueling", "dqn_nstep",
+                          "dqn_dueling_nstep", "dqn_per", "dqn_mistake", "dqn_per_mistake")) + """
 
 ## Achievements
 

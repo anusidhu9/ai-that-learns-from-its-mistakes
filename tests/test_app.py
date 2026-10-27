@@ -149,3 +149,14 @@ def test_train_with_reward_shaping():
     assert trainer.env.config.rewards.shaping == app.SHAPING_STRENGTH
     assert any(r["r_shaping"] != 0.0 for r in trainer.history)
     assert "shaping" in app.ABOUT
+
+
+@pytest.mark.parametrize("agent", ["dqn_dueling", "dqn_nstep", "dqn_dueling_nstep"])
+def test_train_tab_offers_dueling_and_n_step(agent):
+    assert agent in [value for _, value in app.AGENT_CHOICES]
+    state = app.new_session()
+    for last in app.train_agent_ui("maze", agent, 50, 0, 75, state):
+        pass
+    assert "Training finished" in last[0]
+    assert state["trainer"].agent.name == agent
+    assert app.fun.NICKNAMES[agent] in app.ABOUT

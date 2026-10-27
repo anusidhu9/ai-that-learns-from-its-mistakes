@@ -1,0 +1,120 @@
+Experiment dqn_variants_speed: One fresh 9x9 maze (layout 8000): do dueling heads or 3-step returns make DQN learn faster? Seeds 300-309.
+  dqn             seed 300  finished: train success 0.00
+  dqn             seed 301  finished: train success 0.00
+  dqn             seed 302  finished: train success 1.00
+  dqn             seed 303  finished: train success 1.00
+  dqn             seed 304  finished: train success 1.00
+  dqn             seed 305  finished: train success 0.00
+  dqn             seed 306  finished: train success 1.00
+  dqn             seed 307  finished: train success 1.00
+  dqn             seed 308  finished: train success 1.00
+  dqn             seed 309  finished: train success 1.00
+  dqn_dueling     seed 300  finished: train success 1.00
+  dqn_dueling     seed 301  finished: train success 1.00
+  dqn_dueling     seed 302  finished: train success 1.00
+  dqn_dueling     seed 303  finished: train success 0.00
+  dqn_dueling     seed 304  finished: train success 1.00
+  dqn_dueling     seed 305  finished: train success 1.00
+  dqn_dueling     seed 306  finished: train success 1.00
+  dqn_dueling     seed 307  finished: train success 0.00
+  dqn_dueling     seed 308  finished: train success 1.00
+  dqn_dueling     seed 309  finished: train success 1.00
+  dqn_nstep       seed 300  finished: train success 1.00
+  dqn_nstep       seed 301  finished: train success 1.00
+  dqn_nstep       seed 302  finished: train success 1.00
+  dqn_nstep       seed 303  finished: train success 1.00
+  dqn_nstep       seed 304  finished: train success 1.00
+  dqn_nstep       seed 305  finished: train success 1.00
+  dqn_nstep       seed 306  finished: train success 1.00
+  dqn_nstep       seed 307  finished: train success 1.00
+  dqn_nstep       seed 308  finished: train success 1.00
+  dqn_nstep       seed 309  finished: train success 1.00
+  dqn_dueling_nstep seed 300  finished: train success 1.00
+  dqn_dueling_nstep seed 301  finished: train success 0.00
+  dqn_dueling_nstep seed 302  finished: train success 1.00
+  dqn_dueling_nstep seed 303  finished: train success 1.00
+  dqn_dueling_nstep seed 304  finished: train success 1.00
+  dqn_dueling_nstep seed 305  finished: train success 1.00
+  dqn_dueling_nstep seed 306  finished: train success 1.00
+  dqn_dueling_nstep seed 307  finished: train success 1.00
+  dqn_dueling_nstep seed 308  finished: train success 1.00
+  dqn_dueling_nstep seed 309  finished: train success 1.00
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent           split    seeds             success     path_efficiency               steps            mistakes             hazards
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.70 +/- 0.35       0.70 +/- 0.35     41.20 +/- 29.02     29.80 +/- 34.34       0.00 +/- 0.00
+dqn_dueling     train       10       0.80 +/- 0.30       0.80 +/- 0.30     32.80 +/- 25.33     20.00 +/- 30.16       0.00 +/- 0.00
+dqn_nstep       train       10       1.00 +/- 0.00       1.00 +/- 0.00      16.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+dqn_dueling_nsteptrain       10       0.90 +/- 0.23       0.90 +/- 0.23     24.40 +/- 19.00      9.50 +/- 21.49       0.00 +/- 0.00
+
+Episode reward, steps to goal (successful episodes only) and mistake types:
+agent           split    seeds        total_reward       steps_to_goal         hazard_rate          collisions            revisits
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10      -1.22 +/- 2.37      16.00 +/- 0.00       0.00 +/- 0.00     29.50 +/- 33.99       0.00 +/- 0.00
+dqn_dueling     train       10      -0.54 +/- 2.08      16.00 +/- 0.00       0.00 +/- 0.00     19.80 +/- 29.86       0.00 +/- 0.00
+dqn_nstep       train       10       0.84 +/- 0.00      16.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+dqn_dueling_nsteptrain       10       0.18 +/- 1.50      16.00 +/- 0.00       0.00 +/- 0.00      9.40 +/- 21.26       0.00 +/- 0.00
+steps_to_goal leaves out seeds that never reached the goal: dqn/train: 7 of 10 seeds, dqn_dueling/train: 8 of 10 seeds, dqn_dueling_nstep/train: 9 of 10 seeds
+
+Success-rate differences (permutation test):
+  [train] dqn_dueling - dqn: +0.10  (p = 1.000)
+           Neural Ned (Two-Headed) vs Neural Ned on success: difference +0.10, p = 1.000. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_nstep - dqn: +0.30  (p = 0.212)
+           Neural Ned (Looks Ahead) vs Neural Ned on success: difference +0.30, p = 0.212. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_dueling_nstep - dqn: +0.20  (p = 0.580)
+           Neural Ned (Two-Headed, Looks Ahead) vs Neural Ned on success: difference +0.20, p = 0.580. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_nstep - dqn_dueling: +0.20  (p = 0.475)
+           Neural Ned (Looks Ahead) vs Neural Ned (Two-Headed) on success: difference +0.20, p = 0.475. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_dueling_nstep - dqn_dueling: +0.10  (p = 1.000)
+           Neural Ned (Two-Headed, Looks Ahead) vs Neural Ned (Two-Headed) on success: difference +0.10, p = 1.000. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_dueling_nstep - dqn_nstep: -0.10  (p = 1.000)
+           Neural Ned (Two-Headed, Looks Ahead) vs Neural Ned (Looks Ahead) on success: difference -0.10, p = 1.000. The jury is still out; more seeds needed before anyone gloats.
+
+Learning speed: greedy success averaged over training checkpoints (permutation test):
+  dqn_dueling 0.338 vs dqn 0.369: difference -0.031  (p = 0.823)
+  dqn_nstep 0.863 vs dqn 0.369: difference +0.494  (p < 0.001)
+  dqn_dueling_nstep 0.700 vs dqn 0.369: difference +0.331  (p = 0.031)
+  dqn_nstep 0.863 vs dqn_dueling 0.338: difference +0.525  (p < 0.001)
+  dqn_dueling_nstep 0.700 vs dqn_dueling 0.338: difference +0.362  (p = 0.015)
+  dqn_dueling_nstep 0.700 vs dqn_nstep 0.863: difference -0.163  (p = 0.217)
+
+Other differences (permutation test):
+  [train] total_reward  dqn_dueling - dqn: +0.679  (p = 0.792)
+  [train] total_reward  dqn_nstep - dqn: +2.057  (p = 0.212)
+  [train] total_reward  dqn_dueling_nstep - dqn: +1.393  (p = 0.212)
+  [train] total_reward  dqn_nstep - dqn_dueling: +1.378  (p = 0.475)
+  [train] total_reward  dqn_dueling_nstep - dqn_dueling: +0.714  (p = 0.475)
+  [train] total_reward  dqn_dueling_nstep - dqn_nstep: -0.664  (p = 1.000)
+  [train] steps_to_goal dqn_dueling - dqn: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn_nstep - dqn: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn_dueling_nstep - dqn: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn_nstep - dqn_dueling: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn_dueling_nstep - dqn_dueling: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn_dueling_nstep - dqn_nstep: +0.000  (p = 1.000)
+  [train] hazards       dqn_dueling - dqn: +0.000  (p = 1.000)
+  [train] hazards       dqn_nstep - dqn: +0.000  (p = 1.000)
+  [train] hazards       dqn_dueling_nstep - dqn: +0.000  (p = 1.000)
+  [train] hazards       dqn_nstep - dqn_dueling: +0.000  (p = 1.000)
+  [train] hazards       dqn_dueling_nstep - dqn_dueling: +0.000  (p = 1.000)
+  [train] hazards       dqn_dueling_nstep - dqn_nstep: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_dueling - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_nstep - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_dueling_nstep - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_nstep - dqn_dueling: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_dueling_nstep - dqn_dueling: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_dueling_nstep - dqn_nstep: +0.000  (p = 1.000)
+  [train] collisions    dqn_dueling - dqn: -9.700  (p = 0.792)
+  [train] collisions    dqn_nstep - dqn: -29.500  (p = 0.212)
+  [train] collisions    dqn_dueling_nstep - dqn: -20.100  (p = 0.212)
+  [train] collisions    dqn_nstep - dqn_dueling: -19.800  (p = 0.475)
+  [train] collisions    dqn_dueling_nstep - dqn_dueling: -10.400  (p = 0.475)
+  [train] collisions    dqn_dueling_nstep - dqn_nstep: +9.400  (p = 1.000)
+
+Replay buffer at the end of training (transitions; mean over seeds):
+  dqn             added     24449  main overwrote      5691
+  dqn_dueling     added     25291  main overwrote      5789
+  dqn_nstep       added     15636  main overwrote         0
+  dqn_dueling_nstep added     18732  main overwrote      1963
+
+Files written to runs\experiments_dqn_variants\dqn_variants_speed

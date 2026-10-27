@@ -18,6 +18,10 @@ same batch dictionary so the agent treats them identically.
 MistakeReplayBuffer wraps either one and additionally keeps a copy of every
 mistake transition (collision, hazard) in a reserved buffer, so each batch
 can mix ordinary experience with remembered mistakes in a fixed proportion.
+
+Every transition can also carry its own bootstrap discount (`discounts`),
+which n-step DQN needs because a transition cut short by the end of an
+episode spans fewer than n steps. One-step DQN never reads it.
 """
 from __future__ import annotations
 
@@ -27,7 +31,8 @@ import numpy as np
 
 
 class ReplayBuffer:
-    """Fixed-size circular buffer of (obs, action, reward, next_obs, terminated)."""
+    """Fixed-size circular buffer of (obs, action, reward, next_obs, terminated),
+    plus an optional per-transition bootstrap discount (NaN when not given)."""
 
     def __init__(self, capacity: int, obs_size: int, seed: Optional[int] = None):
         if capacity < 1:
@@ -40,19 +45,22 @@ class ReplayBuffer:
         self.actions = np.zeros(capacity, dtype=np.int64)
         self.rewards = np.zeros(capacity, dtype=np.float32)
         self.terminated = np.zeros(capacity, dtype=np.float32)
+        self.discounts = np.full(capacity, np.nan, dtype=np.float32)
         self.pos = 0
         self.size = 0
 
     def __len__(self) -> int:
         return self.size
 
-    def add(self, obs, action, reward, next_obs, terminated) -> int:
+    def add(self, obs, action, reward, next_obs, terminated,
+            discount: Optional[float] = None) -> int:
         i = self.pos
         self.obs[i] = obs
         self.next_obs[i] = next_obs
         self.actions[i] = action
         self.rewards[i] = reward
         self.terminated[i] = float(terminated)
+        self.discounts[i] = np.nan if discount is None else discount
         self.pos = (self.pos + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
         return i
@@ -64,6 +72,7 @@ class ReplayBuffer:
             "rewards": self.rewards[idx],
             "next_obs": self.next_obs[idx],
             "terminated": self.terminated[idx],
+            "discounts": self.discounts[idx],
             "weights": weights.astype(np.float32),
             "indices": idx,
         }
@@ -82,7 +91,8 @@ class ReplayBuffer:
         return {"capacity": self.capacity, "pos": self.pos, "size": n,
                 "obs": self.obs[:n].copy(), "next_obs": self.next_obs[:n].copy(),
                 "actions": self.actions[:n].copy(), "rewards": self.rewards[:n].copy(),
-                "terminated": self.terminated[:n].copy()}
+                "terminated": self.terminated[:n].copy(),
+                "discounts": self.discounts[:n].copy()}
 
     def load_state_dict(self, state: dict) -> None:
         if state["capacity"] != self.capacity:
@@ -93,6 +103,8 @@ class ReplayBuffer:
         self.actions[:n] = state["actions"]
         self.rewards[:n] = state["rewards"]
         self.terminated[:n] = state["terminated"]
+        # buffers saved before n-step returns existed have no discounts
+        self.discounts[:n] = state.get("discounts", np.nan)
         self.pos, self.size = state["pos"], n
 
 
@@ -149,8 +161,9 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self.tree = SumTree(capacity)
         self.max_priority = 1.0  # raw |td| + eps; new data gets the largest seen
 
-    def add(self, obs, action, reward, next_obs, terminated) -> int:
-        i = super().add(obs, action, reward, next_obs, terminated)
+    def add(self, obs, action, reward, next_obs, terminated,
+            discount: Optional[float] = None) -> int:
+        i = super().add(obs, action, reward, next_obs, terminated, discount)
         self.tree.set(np.array([i]), np.array([self.max_priority ** self.alpha]))
         return i
 

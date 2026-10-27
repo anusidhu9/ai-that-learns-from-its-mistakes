@@ -18,6 +18,7 @@ reads it (for info["events"]); every agent works without it.
 """
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import asdict, dataclass, field
 from typing import Dict, Optional, Tuple
 
@@ -216,32 +217,61 @@ class DQNConfig:
     mistake_fraction: float = 0.25  # share of each batch drawn from the reserve
     mistake_capacity: int = 5_000   # reserve size (circular)
     mistake_events: Tuple[str, ...] = MISTAKE_REPLAY_EVENTS
+    dueling: bool = False           # value + advantage heads (Wang et al., 2016)
+    n_step: int = 1                 # learn from n rewards before bootstrapping
 
 
 class QNetwork(nn.Module):
-    """MLP mapping an observation vector to one Q-value per action."""
+    """MLP mapping an observation vector to one Q-value per action.
 
-    def __init__(self, obs_size: int, n_actions: int, hidden: Tuple[int, ...] = (128, 128)):
+    dueling=True (Wang et al., 2016) ends the shared layers in two heads, a
+    state value V(s) and per-action advantages A(s, a), combined as
+
+        Q(s, a) = V(s) + A(s, a) - mean_a' A(s, a')
+
+    (subtracting the mean makes V and A identifiable). The plain network is
+    built exactly as before, so its initial weights don't change.
+    """
+
+    def __init__(self, obs_size: int, n_actions: int, hidden: Tuple[int, ...] = (128, 128),
+                 dueling: bool = False):
         super().__init__()
         layers, size = [], obs_size
         for width in hidden:
             layers += [nn.Linear(size, width), nn.ReLU()]
             size = width
-        layers.append(nn.Linear(size, n_actions))
-        self.net = nn.Sequential(*layers)
+        self.dueling = dueling
+        if dueling:
+            self.net = nn.Sequential(*layers)
+            self.value = nn.Linear(size, 1)
+            self.advantage = nn.Linear(size, n_actions)
+        else:
+            layers.append(nn.Linear(size, n_actions))
+            self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        if not self.dueling:
+            return self.net(x)
+        h = self.net(x)
+        advantage = self.advantage(h)
+        return self.value(h) + advantage - advantage.mean(dim=1, keepdim=True)
 
 
 DQN_NICKNAMES = {"dqn": "Neural Ned", "dqn_per": "Neural Ned (Holds Grudges)",
                  "dqn_mistake": "Neural Ned (Keeps a Diary)",
-                 "dqn_per_mistake": "Neural Ned (Holds Grudges, Keeps a Diary)"}
+                 "dqn_per_mistake": "Neural Ned (Holds Grudges, Keeps a Diary)",
+                 "dqn_dueling": "Neural Ned (Two-Headed)",
+                 "dqn_nstep": "Neural Ned (Looks Ahead)",
+                 "dqn_dueling_nstep": "Neural Ned (Two-Headed, Looks Ahead)"}
+N_STEP_DEFAULT = 3  # n for the named n-step agents (as in Rainbow, Hessel et al., 2018)
 
 
 def dqn_name(config: DQNConfig) -> str:
-    """'dqn', 'dqn_per', 'dqn_mistake' or 'dqn_per_mistake'."""
+    """'dqn' plus '_per', '_dueling', '_nstep' and '_mistake' for each option on,
+    e.g. 'dqn_per_mistake' or 'dqn_dueling_nstep'."""
     return ("dqn_per" if config.prioritized else "dqn") + \
+        ("_dueling" if config.dueling else "") + \
+        ("_nstep" if config.n_step > 1 else "") + \
         ("_mistake" if config.mistake_replay else "")
 
 
@@ -265,6 +295,17 @@ class DQNAgent:
     are also kept in a reserve, and mistake_fraction of every batch is drawn
     from it (see MistakeReplayBuffer). Off by default; when off, the agent is
     exactly the original DQN.
+
+    With n_step = n > 1, each stored transition spans up to n steps:
+
+        y_i = R_i + gamma^k * Q(s_{t+k}, a*; theta_target)  (0 if s_{t+k} is terminal)
+        R_i = r_t + gamma r_{t+1} + ... + gamma^(k-1) r_{t+k-1}
+
+    with k = n, or fewer for the last steps of an episode. A timeout still
+    bootstraps, with gamma^k. The rewards come from the behaviour policy
+    (exploration included) and are not corrected for it, as in Rainbow.
+    dueling switches the network to value + advantage heads. Both are off by
+    default (n_step = 1, dueling = False) and then the agent is unchanged.
     """
 
     def __init__(self, obs_size: int, n_actions: int, config: Optional[DQNConfig] = None,
@@ -273,14 +314,19 @@ class DQNAgent:
         self.n_actions = n_actions
         self.config = config if config is not None else DQNConfig()
         self.name = dqn_name(self.config)
-        self.nickname = DQN_NICKNAMES[self.name]
+        self.nickname = DQN_NICKNAMES.get(self.name, DQN_NICKNAMES["dqn"])
         self.rng = np.random.default_rng(seed)
         if seed is not None:
             torch.manual_seed(seed)
 
         cfg = self.config
-        self.online = QNetwork(obs_size, n_actions, cfg.hidden)
-        self.target = QNetwork(obs_size, n_actions, cfg.hidden)
+        if cfg.n_step < 1:
+            raise ValueError("n_step must be at least 1")
+        if cfg.n_step > 1 and cfg.mistake_replay:
+            raise ValueError("n-step returns can't be combined with mistake replay: "
+                             "it is undefined which of the n steps makes the mistake")
+        self.online = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling)
+        self.target = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling)
         self.target.load_state_dict(self.online.state_dict())
         self.target.eval()
         self.optimizer = torch.optim.Adam(self.online.parameters(), lr=cfg.lr)
@@ -296,6 +342,9 @@ class DQNAgent:
         self.episodes = 0
         self.env_steps = 0
         self.updates = 0
+        # n-step: the last (obs, action, reward) of the current episode not yet
+        # stored. Empty between episodes, so checkpoints never need it.
+        self._recent: deque = deque()
 
     @property
     def epsilon(self) -> float:
@@ -323,6 +372,8 @@ class DQNAgent:
         if self.config.mistake_replay:
             self.buffer.add(obs, action, reward, next_obs, terminated,
                             mistake=is_mistake(info, self.config.mistake_events))
+        elif self.config.n_step > 1:
+            self._add_n_step(obs, action, reward, next_obs, terminated, truncated)
         else:
             self.buffer.add(obs, action, reward, next_obs, terminated)
         self.env_steps += 1
@@ -330,6 +381,21 @@ class DQNAgent:
         if len(self.buffer) < cfg.learning_starts or self.env_steps % cfg.train_freq != 0:
             return None
         return self._learn()
+
+    def _add_n_step(self, obs, action, reward, next_obs, terminated, truncated) -> None:
+        """Store the n-step transition starting n steps ago once it is complete,
+        and at the end of an episode every shorter one still waiting."""
+        n, gamma = self.config.n_step, self.config.gamma
+        self._recent.append((obs, action, reward))
+        done = terminated or truncated
+        while self._recent and (len(self._recent) == n or done):
+            ret = sum(gamma ** k * r for k, (_, _, r) in enumerate(self._recent))
+            first_obs, first_action, _ = self._recent[0]
+            self.buffer.add(first_obs, first_action, ret, next_obs, terminated,
+                            discount=gamma ** len(self._recent))
+            self._recent.popleft()
+            if not done:
+                break
 
     def _learn(self) -> dict:
         cfg = self.config
@@ -349,7 +415,11 @@ class DQNAgent:
                 next_q = next_target.gather(1, best).squeeze(1)
             else:
                 next_q = next_target.max(dim=1).values
-            y = rewards + cfg.gamma * (1.0 - terminated) * next_q
+            if cfg.n_step > 1:
+                discounts = torch.as_tensor(batch["discounts"])
+                y = rewards + discounts * (1.0 - terminated) * next_q
+            else:
+                y = rewards + cfg.gamma * (1.0 - terminated) * next_q
 
         td = (y - q).detach().numpy()
         loss = (weights * F.smooth_l1_loss(q, y, reduction="none")).mean()
@@ -394,8 +464,11 @@ class DQNAgent:
             cfg["mistake_events"] = tuple(cfg["mistake_events"])
         if (cfg["hidden"] != tuple(self.config.hidden)
                 or cfg["prioritized"] != self.config.prioritized
-                or cfg.get("mistake_replay", False) != self.config.mistake_replay):
-            raise ValueError("checkpoint network size or replay type differs from this agent")
+                or cfg.get("mistake_replay", False) != self.config.mistake_replay
+                or cfg.get("dueling", False) != self.config.dueling
+                or cfg.get("n_step", 1) != self.config.n_step):
+            raise ValueError("checkpoint network, replay type or n-step setting differs "
+                             "from this agent")
         self.config = DQNConfig(**cfg)
         self.online.load_state_dict(state["online"])
         self.target.load_state_dict(state["target"])
@@ -411,7 +484,8 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
     """Build an agent by name: 'random', 'tabular_q', or a DQN variant.
 
     DQN variants: 'dqn', 'dqn_per' (prioritized replay), 'dqn_mistake'
-    (mistake-aware replay) and 'dqn_per_mistake' (both). kwargs go to
+    (mistake-aware replay), 'dqn_per_mistake' (both), 'dqn_dueling' (dueling
+    heads), 'dqn_nstep' (3-step returns) and 'dqn_dueling_nstep'. kwargs go to
     TabularQAgent, or become DQNConfig fields for the DQN variants.
     """
     if name == "random":
@@ -421,6 +495,9 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
     if name in DQN_NICKNAMES:
         kwargs["prioritized"] = name.startswith("dqn_per")
         kwargs["mistake_replay"] = name.endswith("_mistake")
+        kwargs["dueling"] = "_dueling" in name
+        if "_nstep" in name:
+            kwargs.setdefault("n_step", N_STEP_DEFAULT)
         return DQNAgent(obs_size, n_actions, DQNConfig(**kwargs), seed=seed)
     raise ValueError(f"unknown agent {name!r}; choose random, tabular_q or one of "
                      f"{', '.join(DQN_NICKNAMES)}")

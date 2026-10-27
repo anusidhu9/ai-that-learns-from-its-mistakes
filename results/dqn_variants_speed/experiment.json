@@ -1,0 +1,34 @@
+{
+  "name": "dqn_variants_speed",
+  "env_preset": "maze",
+  "env_overrides": {
+    "layout_seed": 8000
+  },
+  "agents": [
+    "dqn",
+    "dqn_dueling",
+    "dqn_nstep",
+    "dqn_dueling_nstep"
+  ],
+  "seeds": [
+    300,
+    301,
+    302,
+    303,
+    304,
+    305,
+    306,
+    307,
+    308,
+    309
+  ],
+  "episodes": 400,
+  "decay_episodes": 300,
+  "eval_every": 25,
+  "eval_episodes": 10,
+  "unseen_layouts": null,
+  "agent_kwargs": {},
+  "description": "One fresh 9x9 maze (layout 8000): do dueling heads or 3-step returns make DQN learn faster? Seeds 300-309.",
+  "agent_types": {},
+  "arm_env_overrides": {}
+}

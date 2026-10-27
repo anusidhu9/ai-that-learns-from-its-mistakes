@@ -31,6 +31,9 @@ TAGLINES: Dict[str, str] = {
     "dqn_per": "Replays its most painful memories first. Relatable.",
     "dqn_mistake": "Writes down every wall it walked into, then rereads the list.",
     "dqn_per_mistake": "Keeps a diary of its mistakes and rereads the worst pages first.",
+    "dqn_dueling": "Asks \"is this a good place to be?\" before \"which way now?\"",
+    "dqn_nstep": "Counts the next three rewards before trusting its own guess.",
+    "dqn_dueling_nstep": "Two heads, three steps of patience.",
 }
 
 _EVENT_LINES: Dict[str, Sequence[str]] = {

@@ -38,6 +38,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **DQN generalizes better to mazes it has never seen.** Trained on 50 mazes and tested on 50 new ones, DQN reached the goal in 45% of unseen mazes against 34% for tabular Q (p = 0.003), and was ahead in 9 of 10 seeds. Its successes on new mazes were near-shortest paths (path efficiency 0.45 vs 0.15, p < 0.001), while tabular Q's were mostly long wanders. On the training mazes the two were level (0.75 vs 0.73, p = 0.56).
 - **Prioritized replay did not help** on these small tasks.
 - **A hint toward the goal speeds up learning.** With potential-based reward shaping, tabular Q and DQN learned a fresh maze sooner (pre-registered, p = 0.002 each after correction). It did not measurably help DQN on new mazes (0.54 vs 0.48, p = 0.366). See [below](#reward-shaping).
+- **3-step returns made DQN learn a maze much faster; dueling heads didn't help.** On a fresh maze, 3-step DQN's learning speed was 0.86 against 0.37 (pre-registered, p = 0.0003 after correction, ahead in all 10 seeds). Neither change measurably helped on new mazes. See [below](#dueling-and-n-step-dqn).
 - **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
 
 **What it does not (yet) support**
@@ -83,6 +84,26 @@ Two experiments tested it, with one [protocol](results/shaping_speed/PROTOCOL.md
 Shaped DQN solved the fixed maze in all 10 seeds by episode 100; plain DQN failed in 4. On held-out mazes the shaped agent hit walls far less often (3.0 vs 14.2 collisions per episode), but it did not reach the goal significantly more often.
 
 ![Greedy success during training, with and without shaping](docs/figures/shaping_speed_curves.png)
+
+### Dueling and n-step DQN
+
+Two standard DQN improvements, tested the same way (one [protocol](results/dqn_variants_speed/PROTOCOL.md) written before either experiment, fresh seeds 300–309, n = 3 fixed in advance):
+
+- **Dueling DQN** (`dqn_dueling`) splits the network's output into how good the cell is and how much better each move is than average.
+- **3-step DQN** (`dqn_nstep`) learns from the next three rewards before trusting its own estimate, so news of the goal travels back through the maze three cells per update instead of one.
+
+| Experiment | Question | DQN | Variant | Verdict |
+|---|---|---|---|---|
+| [`dqn_variants_speed`](results/dqn_variants_speed/ANALYSIS.md): one fresh 9×9 maze | Does dueling learn faster? | 0.369 | 0.338 | No evidence (p = 0.82) |
+| | Do 3-step returns learn faster? | 0.369 | 0.863 | **Yes** (p = 0.0003) |
+| [`dqn_variants_generalization`](results/dqn_variants_generalization/ANALYSIS.md): 50 training + 50 **held-out** mazes, local view | Does dueling solve more new mazes? | 0.36 ± 0.07 | 0.39 ± 0.06 | No evidence (p = 0.93) |
+| | Do 3-step returns solve more new mazes? | 0.36 ± 0.07 | 0.40 ± 0.06 | No evidence (p = 0.93) |
+
+*Learning speed = greedy success averaged over the evaluations during training. p-values are Holm-corrected within each experiment.*
+
+Every 3-step run solved the fixed maze by episode 150 and kept it; plain DQN never solved it in 2 of 10 seeds. As with reward shaping, faster learning on one maze did not carry over to mazes the agent had never seen.
+
+![Greedy success during training, DQN variants](docs/figures/dqn_variants_speed_curves.png)
 
 ## Quick start
 
@@ -157,6 +178,8 @@ Experiments are **resumable**: if Colab disconnects, run the same command again 
 - **DQN**: a 2×128 MLP minimising the Huber loss to `r + γ Q_target(s′, argmax Q(s′,·))` (Double DQN), with a target network copied every 100 updates and experience replay.
 - **DQN + PER**: replays transitions with probability ∝ |TD error|^0.6, corrected by importance-sampling weights.
 - **DQN + mistakes** (`dqn_mistake`, also `dqn_per_mistake`): keeps every collision and hazard transition in a 5,000-transition reserve as well as the normal buffer, and draws 25% of each batch from it.
+- **Dueling DQN** (`dqn_dueling`): value and advantage heads, `Q = V + A − mean(A)`.
+- **3-step DQN** (`dqn_nstep`, also `dqn_dueling_nstep`): targets `r_t + γ r_{t+1} + γ² r_{t+2} + γ³ Q_target(s_{t+3}, ·)`, with shorter tails at the end of an episode.
 
 Exploration is ε-greedy, decaying linearly from 1.0 to 0.05. Timeouts are treated as truncation (the agent still bootstraps), not as true terminal states.
 
@@ -180,14 +203,14 @@ The commentator only reads the logs; it never changes a reward, an agent or a re
 ```
 src/
   envs.py           grid worlds, rewards, mistake events
-  agents.py         random, tabular Q-learning, DQN (+ Double DQN), agent factory
+  agents.py         random, tabular Q-learning, DQN (+ Double, dueling, n-step), agent factory
   replay.py         uniform and prioritized replay buffers (sum tree)
   training.py       Trainer: logs, checkpoints, exact resumption, CLI
   evaluation.py     greedy evaluation, multi-seed experiments, statistics, CLI
   visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              227 tests (pytest); `-m "not slow"` skips one long training test
+tests/              243 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report
@@ -203,7 +226,7 @@ LICENSE             MIT License
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
 - 5–10 seeds per experiment: enough to show large differences, not small ones.
-- One set of hyperparameters per algorithm, tuned on the fixed maze only, and one reward-shaping strength (1.0). Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
+- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0) and one n for multi-step returns (3). Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 
 See [REPORT.md](REPORT.md) for the full discussion. To write up a new experiment, start from [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md); to publish your own copy, follow [docs/PUBLISHING.md](docs/PUBLISHING.md).

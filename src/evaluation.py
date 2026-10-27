@@ -212,6 +212,12 @@ SH_SEEDS = tuple(range(200, 210))
 SH_LAYOUT = 7000
 SH_POOL = tuple(range(7100, 7150))
 SH_HELDOUT = tuple(range(7200, 7250))
+# Dueling / n-step study (pre-registered in results/dqn_variants_speed/PROTOCOL.md):
+# fresh seeds and layouts, n = 3 fixed in advance.
+DV_SEEDS = tuple(range(300, 310))
+DV_LAYOUT = 8000
+DV_POOL = tuple(range(8100, 8150))
+DV_HELDOUT = tuple(range(8200, 8250))
 
 EXPERIMENTS: Dict[str, Experiment] = {
     "fixed_maze": Experiment(
@@ -265,6 +271,19 @@ EXPERIMENTS: Dict[str, Experiment] = {
         description="Train DQN with a local 5x5 view on 50 fresh mazes (7100-7149), with and "
                     "without reward shaping (strength 1.0); test on 50 held-out mazes "
                     "(7200-7249). Seeds 200-209."),
+    "dqn_variants_speed": Experiment(
+        "dqn_variants_speed", "maze", env_overrides={"layout_seed": DV_LAYOUT},
+        agents=("dqn", "dqn_dueling", "dqn_nstep", "dqn_dueling_nstep"), seeds=DV_SEEDS,
+        episodes=400, decay_episodes=300, eval_every=25,
+        description="One fresh 9x9 maze (layout 8000): do dueling heads or 3-step returns "
+                    "make DQN learn faster? Seeds 300-309."),
+    "dqn_variants_generalization": Experiment(
+        "dqn_variants_generalization", "maze",
+        env_overrides={"layout_pool": list(DV_POOL), "obs_mode": "local"},
+        agents=("dqn", "dqn_dueling", "dqn_nstep"), seeds=DV_SEEDS,
+        episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=DV_HELDOUT,
+        description="Train DQN, dueling DQN and 3-step DQN with a local 5x5 view on 50 fresh "
+                    "mazes (8100-8149); test on 50 held-out mazes (8200-8249). Seeds 300-309."),
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},
