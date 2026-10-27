@@ -1,0 +1,5 @@
+agent,split,n_seeds,success_mean,success_ci,steps_mean,steps_ci,total_reward_mean,total_reward_ci,path_efficiency_mean,path_efficiency_ci,mistakes_mean,mistakes_ci,collisions_mean,collisions_ci,hazards_mean,hazards_ci,revisits_mean,revisits_ci,timeout_mean,timeout_ci,steps_to_goal_mean,steps_to_goal_ci,hazard_rate_mean,hazard_rate_ci,steps_to_goal_n
+tabular_q,train,10,1.0,0.0,16.0,0.0,0.8400000000000001,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,16.0,0.0,0.0,0.0,10
+tabular_q_shaped,train,10,1.0,0.0,16.0,0.0,0.8400000000000001,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,16.0,0.0,0.0,0.0,10
+dqn,train,10,0.6,0.36938305321170317,49.6,31.02817646978307,-1.31,2.104762334839732,0.6,0.36938305321170317,39.7,36.66184954908849,19.6,29.556800000000003,0.0,0.0,19.7,29.70807842254359,0.4,0.36938305321170317,16.0,0.0,0.0,0.0,6
+dqn_shaped,train,10,1.0,0.0,16.0,0.0,0.8400000000000001,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,16.0,0.0,0.0,0.0,10

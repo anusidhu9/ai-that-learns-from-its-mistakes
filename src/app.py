@@ -66,6 +66,7 @@ METRIC_CHOICES = [("Success rate", "success"), ("Path efficiency", "path_efficie
                   ("Total reward", "total_reward")]
 UNSEEN_BASE = 1000
 MY_MAZE = "My maze"
+SHAPING_STRENGTH = 1.0  # the value the shaping experiments used
 CELL_PX = 36
 BRUSHES = [("⬛ Wall", "wall"), ("⬜ Empty", "empty"), ("🟥 Hazard", "hazard"),
            ("🔵 Start", "start"), ("🟩 Goal", "goal")]
@@ -174,7 +175,8 @@ def _commentary_text(state: dict) -> str:
     return "\n".join(reversed(state["commentary"])) or "The commentator is warming up."
 
 
-def train_agent_ui(preset, agent, episodes, seed, decay_pct, state, use_maze=False):
+def train_agent_ui(preset, agent, episodes, seed, decay_pct, state, use_maze=False,
+                   shaping=False):
     state = state or new_session()
     episodes = int(min(int(episodes), MAX_EPISODES.get(agent, 1000)))
     kwargs = {} if agent == "random" else {
@@ -189,8 +191,10 @@ def train_agent_ui(preset, agent, episodes, seed, decay_pct, state, use_maze=Fal
                    state)
             return
         layout_text = layout_to_ascii(ed["grid"], ed["start"], ed["goal"])
-    config = TrainConfig(env_preset=preset, agent=agent, agent_kwargs=kwargs,
-                         episodes=episodes, seed=int(seed), layout_text=layout_text)
+    overrides = {"rewards": {"shaping": SHAPING_STRENGTH}} if shaping else {}
+    config = TrainConfig(env_preset=preset, env_overrides=overrides, agent=agent,
+                         agent_kwargs=kwargs, episodes=episodes, seed=int(seed),
+                         layout_text=layout_text)
     trainer = Trainer(config)  # in memory; checkpoints are saved on request
     state.update(trainer=trainer, frames=[], replay_env=None)
     state["commentary"] = deque(maxlen=14)
@@ -639,12 +643,20 @@ environment answers with a reward:
 | step on a hazard | {RewardConfig().hazard:+} |
 | revisit a cell this episode | {RewardConfig().revisit:+} |
 | run out of steps | {RewardConfig().timeout:+} (episode ends) |
+| *reward shaping (optional)* | {SHAPING_STRENGTH:g} × (0.99 · φ(next cell) − φ(this cell)) |
 
 **Learning from mistakes** means turning those penalties into better decisions. Tabular
 Q-learning keeps a table of action values and nudges each one toward
 `reward + γ · best next value`; DQN replaces the table with a neural network trained on
 replayed past experience. **Greedy evaluation** turns exploration off, so the agent has to
 rely on what it learned.
+
+**Reward shaping** (optional, Train tab) adds a hint toward the goal: φ is minus the maze
+distance to the goal, scaled to [−1, 0], so moving closer earns a little and moving away
+costs the same. This form (potential-based) provably doesn't change the best policy, and
+going in circles earns nothing. The hint is only for learning: every reported reward and
+result is the task's. Whether it actually helps is tested in the `shaping_speed` and
+`shaping_generalization` experiments.
 
 ## Meet the agents
 
@@ -704,6 +716,9 @@ def build_app() -> gr.Blocks:
                     seed = gr.Number(value=0, precision=0, label="Seed")
                     decay = gr.Slider(10, 100, value=75, step=5,
                                       label="Exploration decays over (% of episodes)")
+                    shaping = gr.Checkbox(value=False, label="Reward shaping",
+                                          info="Adds a hint toward the goal to the reward "
+                                               "it learns from (see About).")
                     use_maze = gr.Checkbox(value=False, label="Train on my maze",
                                            info="Draw it in the 🗺️ tab. The environment "
                                                 "above still sets the rules.")
@@ -724,7 +739,8 @@ def build_app() -> gr.Blocks:
             demo.load(lambda p: maze_figure(_preview_env(p), title=f"{p} layout"),
                       preset, preview)
             train_event = train_btn.click(
-                train_agent_ui, [preset, agent, episodes, seed, decay, state, use_maze],
+                train_agent_ui, [preset, agent, episodes, seed, decay, state, use_maze,
+                                 shaping],
                 [status, curve_plot, types_plot, commentary, achievements_md, state])
             stop_btn.click(None, None, None, cancels=[train_event])
 

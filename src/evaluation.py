@@ -159,6 +159,8 @@ class Experiment:
     agent_types: arm label -> agent name, so one algorithm can appear as several
     arms with different settings, e.g. {"dqn_5k": "dqn", "dqn_10k": "dqn"} with
     the buffer sizes in agent_kwargs. Labels not listed are agent names.
+    arm_env_overrides: per-arm environment overrides added to env_overrides,
+    e.g. {"dqn_shaped": {"rewards": {"shaping": 1.0}}}.
     """
 
     name: str
@@ -174,11 +176,13 @@ class Experiment:
     agent_kwargs: Dict[str, dict] = field(default_factory=dict)
     description: str = ""
     agent_types: Dict[str, str] = field(default_factory=dict)
+    arm_env_overrides: Dict[str, dict] = field(default_factory=dict)
 
     def train_config(self, agent: str, seed: int) -> TrainConfig:
         kwargs = {} if agent == "random" else {"epsilon": {"decay_episodes": self.decay_episodes}}
         kwargs.update(self.agent_kwargs.get(agent, {}))
-        return TrainConfig(env_preset=self.env_preset, env_overrides=dict(self.env_overrides),
+        overrides = {**self.env_overrides, **self.arm_env_overrides.get(agent, {})}
+        return TrainConfig(env_preset=self.env_preset, env_overrides=overrides,
                            agent=self.agent_types.get(agent, agent), agent_kwargs=kwargs,
                            episodes=self.episodes, seed=seed, checkpoint_every=self.eval_every)
 
@@ -201,6 +205,13 @@ LM_KWARGS = {"dqn_5k": {"buffer_size": 5000},
              "dqn_10k": {"buffer_size": 10_000}}
 LM_COMMON = dict(env_preset="maze_hazards", episodes=3000, decay_episodes=2000,
                  eval_every=500, agent_types=LM_ARMS, agent_kwargs=LM_KWARGS)
+# Reward shaping study (pre-registered in results/shaping_*/PROTOCOL.md): fresh
+# seeds and layouts, shaping strength fixed at 1.0 in advance (never tuned).
+SHAPING = {"rewards": {"shaping": 1.0}}
+SH_SEEDS = tuple(range(200, 210))
+SH_LAYOUT = 7000
+SH_POOL = tuple(range(7100, 7150))
+SH_HELDOUT = tuple(range(7200, 7250))
 
 EXPERIMENTS: Dict[str, Experiment] = {
     "fixed_maze": Experiment(
@@ -237,6 +248,23 @@ EXPERIMENTS: Dict[str, Experiment] = {
         description="Feasibility pilot for long_memory_mistakes: baseline arm only, on its "
                     "own seed and layouts, to measure run time and check that the buffer "
                     "overwrites old transitions. Never used to choose settings for the variant."),
+    "shaping_speed": Experiment(
+        "shaping_speed", "maze", env_overrides={"layout_seed": SH_LAYOUT},
+        agents=("tabular_q", "tabular_q_shaped", "dqn", "dqn_shaped"), seeds=SH_SEEDS,
+        episodes=400, decay_episodes=300, eval_every=25,
+        agent_types={"tabular_q_shaped": "tabular_q", "dqn_shaped": "dqn"},
+        arm_env_overrides={"tabular_q_shaped": SHAPING, "dqn_shaped": SHAPING},
+        description="One fresh 9x9 maze (layout 7000): does potential-based reward shaping "
+                    "(strength 1.0) make tabular Q and DQN learn faster? Seeds 200-209."),
+    "shaping_generalization": Experiment(
+        "shaping_generalization", "maze",
+        env_overrides={"layout_pool": list(SH_POOL), "obs_mode": "local"},
+        agents=("dqn", "dqn_shaped"), seeds=SH_SEEDS,
+        episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=SH_HELDOUT,
+        agent_types={"dqn_shaped": "dqn"}, arm_env_overrides={"dqn_shaped": SHAPING},
+        description="Train DQN with a local 5x5 view on 50 fresh mazes (7100-7149), with and "
+                    "without reward shaping (strength 1.0); test on 50 held-out mazes "
+                    "(7200-7249). Seeds 200-209."),
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},
@@ -469,6 +497,18 @@ def summarize(results: List[dict]) -> List[dict]:
     return rows
 
 
+def curve_means(curves: List[dict], metric: str = "success") -> List[dict]:
+    """Per (agent, seed): the metric averaged over every greedy evaluation
+    during training except the one before training starts. For success this
+    is the area under the learning curve: higher means it learned sooner."""
+    groups: Dict[tuple, List[float]] = {}
+    for row in curves:
+        if row["episode"] > 0 and row.get(metric) is not None:
+            groups.setdefault((row["agent"], int(row["seed"])), []).append(float(row[metric]))
+    return [{"agent": agent, "seed": seed, "split": "curve", metric: float(np.mean(vals))}
+            for (agent, seed), vals in sorted(groups.items())]
+
+
 def compare_agents(results: List[dict], a: str, b: str, metric: str = "success",
                    split: str = "train") -> dict:
     """Difference in a metric between two agents with a permutation p-value."""
@@ -544,6 +584,14 @@ def main(argv: Optional[List[str]] = None) -> None:
             c = compare_agents(out["results"], b, a, "success", split)
             print(f"  [{split}] {b} - {a}: {c['difference']:+.2f}  ({format_p(c['p_value'])})")
             print(f"           {fun.verdict(c['p_value'], c['difference'], b, a)}")
+    speed = curve_means(out["curves"])
+    if len(exp.seeds) >= 2:
+        print("\nLearning speed: greedy success averaged over training checkpoints "
+              "(permutation test):")
+        for a, b in itertools.combinations(agents, 2):
+            c = compare_agents(speed, b, a, "success", "curve")
+            print(f"  {b} {c['mean_a']:.3f} vs {a} {c['mean_b']:.3f}: "
+                  f"difference {c['difference']:+.3f}  ({format_p(c['p_value'])})")
     print("\nOther differences (permutation test):")
     for metric in ("total_reward", "steps_to_goal", "hazards", "hazard_rate", "collisions"):
         for split in splits:

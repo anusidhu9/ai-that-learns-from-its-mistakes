@@ -1,0 +1,48 @@
+{
+  "name": "shaping_speed",
+  "env_preset": "maze",
+  "env_overrides": {
+    "layout_seed": 7000
+  },
+  "agents": [
+    "tabular_q",
+    "tabular_q_shaped",
+    "dqn",
+    "dqn_shaped"
+  ],
+  "seeds": [
+    200,
+    201,
+    202,
+    203,
+    204,
+    205,
+    206,
+    207,
+    208,
+    209
+  ],
+  "episodes": 400,
+  "decay_episodes": 300,
+  "eval_every": 25,
+  "eval_episodes": 10,
+  "unseen_layouts": null,
+  "agent_kwargs": {},
+  "description": "One fresh 9x9 maze (layout 7000): does potential-based reward shaping (strength 1.0) make tabular Q and DQN learn faster? Seeds 200-209.",
+  "agent_types": {
+    "tabular_q_shaped": "tabular_q",
+    "dqn_shaped": "dqn"
+  },
+  "arm_env_overrides": {
+    "tabular_q_shaped": {
+      "rewards": {
+        "shaping": 1.0
+      }
+    },
+    "dqn_shaped": {
+      "rewards": {
+        "shaping": 1.0
+      }
+    }
+  }
+}

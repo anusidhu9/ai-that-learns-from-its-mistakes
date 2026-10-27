@@ -2,6 +2,20 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Reward shaping (Stage C)
+
+**Added**
+- Potential-based reward shaping (`RewardConfig.shaping`, `shaping_gamma`): each step adds k · (γ·φ(next) − φ(now)), where φ is minus the maze distance to the goal scaled to [−1, 0] and is 0 once the episode terminates. Off by default; with it off every earlier result is reproduced exactly (checked on `hazard_maze`, tabular Q and DQN, seeds 0–1).
+- The shaping term is logged separately (`shaping` in the episode summary, `r_shaping` in the episode log and the reward-breakdown chart). `total_reward` stays the task reward, so shaped and unshaped runs compare directly. Episode logs saved before this column existed still load and resume.
+- `GridWorld.potential(pos)`; `Experiment.arm_env_overrides` (per-arm environment settings, e.g. a shaped arm); `curve_means()`, a learning-speed metric (greedy success averaged over the evaluations during training), printed by the experiment command line for every pair of arms.
+- Experiments `shaping_speed` and `shaping_generalization`, pre-registered in `results/shaping_speed/PROTOCOL.md` with fresh seeds (200–209) and layouts (7000–7249). Results, analyses, two figures, README and REPORT section 6.8.
+- Dashboard: a **Reward shaping** checkbox in the Train tab and an explanation in About. Shaped arms are drawn in their base algorithm's color with dotted lines, triangle markers and dotted bars.
+- 11 tests (227 in total): the potential, the signs of the shaping term, that its discounted sum telescopes (so loops earn nothing), that `total_reward` excludes it, old logs, per-arm settings, the learning-speed metric and the dashboard checkbox.
+
+**Results**
+- `shaping_speed`: both agents learned the maze sooner with shaping (tabular Q 0.931 → 0.986, DQN 0.388 → 0.794; Holm-corrected p = 0.002 each). Shaped DQN solved it in 10 of 10 seeds, plain DQN in 6 (exploratory, p = 0.093). All final routes were the 16-step shortest path.
+- `shaping_generalization`: held-out success 0.54 with shaping vs 0.48 without (p = 0.366): no evidence of a difference. Exploratory: better on the training mazes (0.94 vs 0.85, p = 0.005) and far fewer wall collisions on held-out mazes (3.0 vs 14.2, p = 0.004).
+
 ## Policy map and maze editor (Stage B)
 
 **Added**

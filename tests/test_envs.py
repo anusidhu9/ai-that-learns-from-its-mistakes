@@ -297,3 +297,62 @@ def test_check_layout():
     assert "can't be reached" in check_layout(*only_via_hazard)
     grid, start, _ = parse_layout(SMALL)
     assert "different" in check_layout(grid, start, start)
+
+
+# -- reward shaping ---------------------------------------------------------------------
+
+def shaped_pair(text=SMALL, **overrides):
+    """The same layout without and with shaping (strength 1)."""
+    plain = GridWorld.from_ascii(text, EnvConfig(**overrides))
+    shaped = GridWorld.from_ascii(text, EnvConfig(rewards=RewardConfig(shaping=1.0), **overrides))
+    return plain, shaped
+
+
+def test_potential_is_scaled_maze_distance():
+    _, env = shaped_pair()
+    env.reset(seed=0)
+    assert env.potential(env.goal) == 0.0
+    # SMALL: start (1,1) is 4 steps from the goal (3,3); the farthest cell is 4 away.
+    assert env.potential(env.start) == pytest.approx(-1.0)
+    assert env.potential((2, 1)) == pytest.approx(-0.75)
+
+
+def test_shaping_signs_and_task_reward_unchanged():
+    plain, shaped = shaped_pair()
+    plain.reset(seed=0)
+    shaped.reset(seed=0)
+    for action in (DOWN, UP, UP):   # toward the goal, away from it, into a wall
+        _, r_plain, *_ = plain.step(action)
+        _, r_shaped, *_ = shaped.step(action)
+        bonus = r_shaped - r_plain
+        if action == DOWN:
+            assert bonus > 0
+        elif shaped.steps == 2:
+            assert bonus < 0
+        else:  # collision: stays put, so the bonus is (gamma - 1) * phi >= 0 and tiny
+            assert 0 <= bonus < 0.02
+    assert shaped.stats["total_reward"] == pytest.approx(plain.stats["total_reward"])
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_discounted_shaping_telescopes(seed):
+    """sum_t gamma^t F_t = gamma^T phi(s_T) - phi(s_0), with phi(s_T) = 0 when the
+    episode terminates: going round in circles earns nothing."""
+    plain, shaped = shaped_pair(hazard_terminal=False, max_steps=30)
+    rng = np.random.default_rng(seed)
+    plain.reset(seed=0)
+    shaped.reset(seed=0)
+    gamma = shaped.config.rewards.shaping_gamma
+    phi0 = shaped.potential(shaped.start)
+    total, t, done = 0.0, 0, False
+    while not done:
+        action = int(rng.integers(4))
+        _, r_plain, *_ = plain.step(action)
+        _, r_shaped, terminated, truncated, info = shaped.step(action)
+        total += gamma ** t * (r_shaped - r_plain)
+        t += 1
+        done = terminated or truncated
+    end = 0.0 if terminated else shaped.potential(shaped.pos)
+    assert total == pytest.approx(gamma ** t * end - phi0)
+    assert info["episode"]["total_reward"] == plain.episode_summary()["total_reward"]
+    assert info["episode"]["shaping"] != 0.0 and plain.episode_summary()["shaping"] == 0.0

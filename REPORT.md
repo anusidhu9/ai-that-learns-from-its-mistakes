@@ -2,7 +2,7 @@
 
 ## 1. Summary
 
-This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, and DQN with an explicit memory of its mistakes was tested in two more, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
+This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, DQN with an explicit memory of its mistakes was tested in two more, and potential-based reward shaping in two pre-registered experiments, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
 
 Main findings:
 
@@ -12,6 +12,7 @@ Main findings:
 4. **DQN avoids hazards that tabular Q-learning walks through, but is less reliable.** With 10 seeds on the hazard maze, tabular Q-learning took a shortcut through a hazard in 9 runs and DQN in 1 (p = 0.002). One DQN run, however, solved the maze and then unlearned it before training ended, something no tabular run did.
 5. **Prioritized experience replay gave no measurable benefit** on these tasks; one of its five fixed-maze runs never solved its maze.
 6. **Replaying mistakes explicitly gave no measurable benefit either.** Keeping collision and hazard transitions in a reserve and drawing 25% of every batch from it did not improve DQN on the hazard maze (Section 6.6). It also did not help in a pre-registered study on held-out hazard mazes, where a small buffer forced the reserve to be the only memory of most past mistakes (0.30 vs 0.37 held-out success, p = 0.082; Section 6.7). A DQN given the same total memory for ordinary experience did best.
+7. **A hint toward the goal speeds up learning, but did not measurably improve generalization.** Potential-based reward shaping (strength fixed at 1.0 in advance) made both agents learn a fresh maze sooner (pre-registered, Holm-corrected: tabular Q p = 0.002, DQN p = 0.002). Shaped DQN solved the maze in all 10 seeds, plain DQN in 6. On 50 held-out mazes, shaped DQN reached the goal in 54% against 48% (p = 0.366): no evidence of a difference (Section 6.8).
 
 ## 2. Question and approach
 
@@ -33,6 +34,8 @@ A `GridWorld` holds walls, optional hazards, a start and a goal. Actions are up,
 | timeout after 100 steps | −0.1 |
 
 Penalties are added to the step cost. An episode's mistakes are its collisions + hazards + revisits + timeouts.
+
+**Optional reward shaping** (off unless stated). The agent learns from the task reward plus F = k · (γ·φ(s′) − φ(s)), where φ(s) is minus the maze distance from the agent's cell to the goal, divided by the largest such distance in the layout (so φ is in [−1, 0]), and φ = 0 once the episode terminates. With γ = 0.99, the agents' own discount, this potential-based form leaves the optimal policy unchanged (Ng, Harada & Russell, 1999), and the discounted shaping over any episode telescopes to γ^T·φ(s_T) − φ(s_0), so walking in circles earns nothing. Shaping is logged separately; every reported reward is the task reward.
 
 | Preset | Layout | Hazards |
 |---|---|---|
@@ -246,6 +249,31 @@ Same maze, seeds 0–9, budget and evaluation as `hazard_maze`, comparing DQN an
 
 ![Greedy success during training](docs/figures/long_memory_curves.png)
 
+### 6.8 Reward shaping (`shaping_speed` and `shaping_generalization`, 10 seeds each, pre-registered)
+
+**Question.** Does a hint toward the goal, added to the reward the agent learns from, make agents learn faster, and does it help on mazes they have never seen? One protocol ([`PROTOCOL.md`](results/shaping_speed/PROTOCOL.md)) covering both experiments was written before any run. Full analyses: [`shaping_speed`](results/shaping_speed/ANALYSIS.md), [`shaping_generalization`](results/shaping_generalization/ANALYSIS.md).
+
+**Design.**
+- **Shaping.** Potential-based, strength k = 1.0 fixed in advance (the most it can add over an episode is about the goal reward); no other value was tried. Each shaped arm is identical to its baseline except for the shaping term.
+- **`shaping_speed`.** One fresh 9×9 maze (layout 7000, shortest path 16 steps), full-map view, 400 episodes, greedy evaluation every 25. Arms: tabular Q and DQN, each with and without shaping.
+- **`shaping_generalization`.** 5×5 local view, 50 fresh training mazes (7100–7149) and 50 held-out mazes (7200–7249), 3,000 episodes. Arms: DQN with and without shaping.
+- **Seeds.** Fresh seeds 200–209 in both.
+- **Primary endpoints.** H1 and H2: learning speed (greedy success averaged over the training evaluations) for tabular Q and for DQN, Holm-corrected together. H3: held-out success for DQN. Two-sided permutation tests, α = 0.05.
+
+| Hypothesis | Without shaping | With shaping | Seeds ahead / tied / behind | p (Holm) | Verdict |
+|---|---|---|---|---|---|
+| H1: tabular Q learns faster | 0.931 | 0.986 | 9 / 1 / 0 | 0.002 | **Supported** |
+| H2: DQN learns faster | 0.388 | 0.794 | 7 / 2 / 1 | 0.002 | **Supported** |
+| H3: DQN succeeds more on held-out mazes | 0.48 ± 0.09 | 0.54 ± 0.11 | 6 / 1 / 3 | 0.366 | No evidence of a difference |
+
+![Greedy success during training on the fixed maze](docs/figures/shaping_speed_curves.png)
+
+- **Speed.** Shaping halved the time tabular Q needed to first reach a perfect greedy score in 6 of 10 seeds (episode 25 instead of 50). For DQN the difference was larger: every shaped run solved the maze by episode 100 and still solved it at episode 400, while plain DQN never solved it in 3 seeds and lost it again in a fourth. Final DQN success 1.00 vs 0.60 is exploratory and not significant (p = 0.093).
+- **Same final routes.** Every successful final episode, shaped or not, took the 16-step shortest path. Shaping changed how fast the agents learned, not what they learned, as the theory predicts.
+- **Generalization (exploratory details).** On the training mazes shaped DQN was better in every seed (success 0.94 vs 0.85, p = 0.005). On held-out mazes it hit walls far less often (3.0 vs 14.2 collisions per episode, p = 0.004) but revisited cells slightly more (39.8 vs 34.2, p = 0.35), and its success gain (+0.06) was within seed noise.
+
+![Success on training and held-out mazes, with and without shaping](docs/figures/shaping_generalization_success.png)
+
 ## 7. Discussion
 
 **Did the agents learn from their mistakes?** Yes, on every fixed layout, and the logs show how. Mistakes concentrated in specific places early in training (the corridor below the start), the corresponding penalties dominated the reward, and both disappeared as Q-values for the offending actions fell. The early-versus-late comparison, the mistake hotspots and the reward breakdown all point the same way, and greedy evaluation confirms it with exploration off.
@@ -263,6 +291,8 @@ Same maze, seeds 0–9, budget and evaluation as `hazard_maze`, comparing DQN an
 
 **Replaying mistakes explicitly.** Two forms of "learning from mistakes on purpose" were tested: over-weighting recent mistakes (Section 6.6) and remembering them after ordinary replay had forgotten them (Section 6.7). Neither helped. The second study was designed to be fair to the idea. It used held-out mazes, fresh seeds, a written protocol, a check that forgetting actually happened, and a control with the same total memory. A plausible explanation is in the numbers. Mistakes were already 27–29% of all transitions, so with a quarter of each batch drawn from the reserve, nearly half of every batch was mistakes. The network then spent its updates on what not to do (it hit fewer walls) at the expense of how to reach the goal (it looped more). This is the same lesson as the terminal-hazard result: penalised events are a proxy for failure, and optimising against the proxy is not the same as succeeding. The penalties already teach the agent about its mistakes through the TD error; replaying them more often did not add information.
 
+**Reward shaping.** Telling the agent which way the goal is, through a potential-based hint, sped up learning for both algorithms and made DQN reliable on a maze where it otherwise failed in 4 of 10 seeds. That is an expected effect, and the experiment confirms it with a pre-registered test rather than a single run. It did not translate into a measurable gain on new mazes. One plausible reason, not tested here: the hint is based on the maze distance, which the local-view agent cannot see, so what it learns from the hint is partly tied to the training mazes. Shaping also gives the agent information computed from the full map, so a shaped agent had more help, not a better learning rule.
+
 ## 8. Problems found and fixed during development
 
 These are reported because each would have changed the conclusions.
@@ -279,7 +309,7 @@ These are reported because each would have changed the conclusions.
 
 - **Small tasks.** 8×8 and 9×9 grids with 100-step episodes, chosen to fit a free CPU. The ranking of algorithms may change on larger problems.
 - **Few seeds.** Five per agent for three of the five experiments can show large effects only. Extending `hazard_maze` and `generalization` to 10 seeds turned two "not established" differences into established ones; the remaining open questions (PER, how often DQN collapses) might be settled the same way.
-- **Limited tuning.** One hyperparameter setting per algorithm. DQN's update frequency and target-update interval were chosen from four settings on the fixed maze; tabular Q-learning was not tuned at all. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); a smaller share, or a task where mistakes are rare, might behave differently, but tuning it on the seeds already examined would mean tuning on the test set.
+- **Limited tuning.** One hyperparameter setting per algorithm, and one shaping strength (1.0). DQN's update frequency and target-update interval were chosen from four settings on the fixed maze; tabular Q-learning was not tuned at all. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); a smaller share, or a task where mistakes are rare, might behave differently, but tuning it on the seeds already examined would mean tuning on the test set.
 - **Fixed training budgets.** Tabular Q-learning was still improving at the end of the generalization runs.
 - **Non-Markovian revisit penalty**, as described in Section 3.
 - **Statistics.** t-intervals on 5–10 bounded values are approximate; the charts clip them to the possible range.
@@ -295,11 +325,13 @@ python -m src.evaluation --experiment fixed_maze        # also: hazard_maze, ter
                                                         #       mistakes_hazard_maze
 python -m src.evaluation --experiment long_memory_pilot
 python -m src.evaluation --experiment long_memory_mistakes --workers 4
+python -m src.evaluation --experiment shaping_speed --workers 4
+python -m src.evaluation --experiment shaping_generalization --workers 4
 python -m src.visualization                             # regenerates docs/figures from results/
-python -m pytest -q                                     # 197 tests
+python -m pytest -q                                     # 227 tests
 ```
 
-The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. The two mistake-replay experiments add `buffer_diagnostics.csv` (how much each replay buffer forgot) and `ANALYSIS.md`; `long_memory_mistakes` also has `PROTOCOL.md` and its pilot in `pilot/`. `--workers N` trains N runs at a time; runs are independent and seeded, so results are the same as with one worker (tested). Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
+The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. The two mistake-replay experiments add `buffer_diagnostics.csv` (how much each replay buffer forgot) and `ANALYSIS.md`; `long_memory_mistakes` also has `PROTOCOL.md` and its pilot in `pilot/`. The two shaping experiments have `ANALYSIS.md`, and their shared `PROTOCOL.md` is in `results/shaping_speed/`. `--workers N` trains N runs at a time; runs are independent and seeded, so results are the same as with one worker (tested). Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
 
 Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.14.1 (CPU), NumPy 2.4.6, Matplotlib 3.11.2, pandas 3.0.6 and Gradio 6.30.0. Exact reproduction is guaranteed for the same software on the same machine. Other platforms should give statistically similar but not bit-identical numbers, because floating-point results can differ between builds.
 
@@ -310,7 +342,8 @@ Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.1
 - The late DQN collapse (Section 6.2): whether it is rare with more seeds, and whether a lower learning rate, a slower target update or early stopping on greedy evaluation prevents it.
 - A larger layout pool, convolutional networks for the full-map observation, and longer training for the generalization study.
 - Optimistic initialisation or count-based exploration bonuses for DQN, to test the explanation of the terminal-hazard failure.
-- A reward variant without per-step shaping, to separate "mistakes" from reward design.
+- A reward variant without per-step penalties, to separate "mistakes" from reward design.
+- Reward shaping with more seeds or more held-out mazes, to detect a generalization effect as small as +0.06 if there is one, and a hint the local-view agent can observe.
 - Hosting the dashboard permanently (for example, on Hugging Face Spaces).
 
 ## References
@@ -319,4 +352,5 @@ Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.1
 - Mnih, V., et al. (2015). Human-level control through deep reinforcement learning. *Nature*, 518, 529–533.
 - van Hasselt, H., Guez, A., & Silver, D. (2016). Deep reinforcement learning with double Q-learning. *AAAI*.
 - Schaul, T., Quan, J., Antonoglou, I., & Silver, D. (2016). Prioritized experience replay. *ICLR*.
+- Ng, A. Y., Harada, D., & Russell, S. (1999). Policy invariance under reward transformations: Theory and application to reward shaping. *ICML*.
 - Sutton, R. S., & Barto, A. G. (2018). *Reinforcement Learning: An Introduction* (2nd ed.). MIT Press.

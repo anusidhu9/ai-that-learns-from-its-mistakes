@@ -37,6 +37,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **But DQN is less reliable.** One of DQN's 10 hazard-maze runs solved the maze from episode 150 to 350, then unlearned it and ended the run walking into a wall, and one DQN + PER run on `fixed_maze` never solved its maze at all. Tabular Q reached the goal in all 25 of its fixed-layout runs.
 - **DQN generalizes better to mazes it has never seen.** Trained on 50 mazes and tested on 50 new ones, DQN reached the goal in 45% of unseen mazes against 34% for tabular Q (p = 0.003), and was ahead in 9 of 10 seeds. Its successes on new mazes were near-shortest paths (path efficiency 0.45 vs 0.15, p < 0.001), while tabular Q's were mostly long wanders. On the training mazes the two were level (0.75 vs 0.73, p = 0.56).
 - **Prioritized replay did not help** on these small tasks.
+- **A hint toward the goal speeds up learning.** With potential-based reward shaping, tabular Q and DQN learned a fresh maze sooner (pre-registered, p = 0.002 each after correction). It did not measurably help DQN on new mazes (0.54 vs 0.48, p = 0.366). See [below](#reward-shaping).
 - **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
 
 **What it does not (yet) support**
@@ -64,6 +65,24 @@ Two experiments tested it, with settings fixed before either ran:
 In `long_memory_mistakes` the 5,000-transition buffer overwrote over 95% of everything the agent saw, and 82–98% of the mistakes in the reserve existed nowhere else, so long-term memory really was tested. DQN given the same 10,000 transitions of ordinary memory did best (exploratory: p = 0.009 against mistake memory). With mistake memory the agent bumped into fewer walls but walked in more loops, which echoes the terminal-hazard result: avoiding the penalised event is not the same as reaching the goal.
 
 ![Success on training and held-out mazes, long-memory study](docs/figures/long_memory_success.png)
+
+### Reward shaping
+
+Reward shaping adds a hint to the reward the agent learns from: a little for moving closer to the goal (by maze distance), the same amount taken away for moving farther. This potential-based form (Ng et al., 1999) provably leaves the best policy unchanged, so going in circles earns nothing. Every reported reward and result is still the task's own. Shaping is off by default; tick **Reward shaping** in the dashboard's Train tab to try it.
+
+Two experiments tested it, with one [protocol](results/shaping_speed/PROTOCOL.md) written before either ran, fresh seeds 200–209 and the strength fixed at 1.0:
+
+| Experiment | Question | Without shaping | With shaping | Verdict |
+|---|---|---|---|---|
+| [`shaping_speed`](results/shaping_speed/ANALYSIS.md): one fresh 9×9 maze | Does tabular Q learn faster? | 0.931 | 0.986 | **Yes** (p = 0.002) |
+| | Does DQN learn faster? | 0.388 | 0.794 | **Yes** (p = 0.002) |
+| [`shaping_generalization`](results/shaping_generalization/ANALYSIS.md): 50 training + 50 **held-out** mazes, local view | Does DQN solve more new mazes? | 0.48 ± 0.09 | 0.54 ± 0.11 | No evidence (p = 0.366) |
+
+*Learning speed = greedy success averaged over the evaluations during training; p-values for speed are Holm-corrected.*
+
+Shaped DQN solved the fixed maze in all 10 seeds by episode 100; plain DQN failed in 4. On held-out mazes the shaped agent hit walls far less often (3.0 vs 14.2 collisions per episode), but it did not reach the goal significantly more often.
+
+![Greedy success during training, with and without shaping](docs/figures/shaping_speed_curves.png)
 
 ## Quick start
 
@@ -168,7 +187,7 @@ src/
   visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              216 tests (pytest); `-m "not slow"` skips one long training test
+tests/              227 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report
@@ -184,7 +203,7 @@ LICENSE             MIT License
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
 - 5–10 seeds per experiment: enough to show large differences, not small ones.
-- One set of hyperparameters per algorithm, tuned on the fixed maze only. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
+- One set of hyperparameters per algorithm, tuned on the fixed maze only, and one reward-shaping strength (1.0). Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 
 See [REPORT.md](REPORT.md) for the full discussion. To write up a new experiment, start from [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md); to publish your own copy, follow [docs/PUBLISHING.md](docs/PUBLISHING.md).

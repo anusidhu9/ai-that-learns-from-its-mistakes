@@ -37,8 +37,10 @@ LOG_FIELDS = [
     "episode", "layout_seed", "success", "steps", "optimal_length", "path_efficiency",
     "total_reward", "mistakes", "collisions", "hazards", "revisits", "timeout",
     "epsilon", "td_error", "loss",
-    "r_goal", "r_step", "r_collision", "r_hazard", "r_revisit", "r_timeout",
+    "r_goal", "r_step", "r_collision", "r_hazard", "r_revisit", "r_timeout", "r_shaping",
 ]
+# Columns added after runs were already saved: missing in older logs, read as 0.
+_LATER_FIELDS = {"r_shaping": "0.0"}
 _INT_FIELDS = {"episode", "steps", "mistakes", "collisions", "hazards", "revisits", "timeout"}
 _OPTIONAL_INT_FIELDS = {"layout_seed", "optimal_length"}
 _BOOL_FIELDS = {"success"}
@@ -107,6 +109,7 @@ def reward_breakdown(summary: dict, rewards: RewardConfig) -> Dict[str, float]:
         "r_hazard": rewards.hazard * summary["hazards"],
         "r_revisit": rewards.revisit * summary["revisits"],
         "r_timeout": rewards.timeout * summary["timeout"],
+        "r_shaping": summary.get("shaping", 0.0),  # not part of total_reward
     }
 
 
@@ -333,8 +336,12 @@ class Trainer:
         assert self.run_dir is not None, "logs are only written for runs with a run_dir"
         episodes_path = self.run_dir / EPISODES_FILE
         new_file = not episodes_path.exists()
+        fields = LOG_FIELDS
+        if not new_file:  # keep an older log's columns when resuming it
+            with open(episodes_path, newline="") as f:
+                fields = next(csv.reader(f), LOG_FIELDS)
         with open(episodes_path, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=LOG_FIELDS)
+            writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
             if new_file:
                 writer.writeheader()
             writer.writerows(rows)
@@ -385,7 +392,7 @@ def load_agent(path: PathLike):
 def _parse_row(raw: dict) -> dict:
     row = {}
     for key in LOG_FIELDS:
-        value = raw[key]
+        value = raw[key] if key in raw else _LATER_FIELDS[key]
         if key in _INT_FIELDS:
             row[key] = int(value)
         elif key in _OPTIONAL_INT_FIELDS:

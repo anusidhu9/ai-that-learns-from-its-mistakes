@@ -1,0 +1,65 @@
+Experiment shaping_generalization: Train DQN with a local 5x5 view on 50 fresh mazes (7100-7149), with and without reward shaping (strength 1.0); test on 50 held-out mazes (7200-7249). Seeds 200-209.
+  dqn             seed 200  finished: train success 0.88
+  dqn             seed 201  finished: train success 0.90
+  dqn             seed 202  finished: train success 0.78
+  dqn             seed 203  finished: train success 0.70
+  dqn             seed 204  finished: train success 0.92
+  dqn             seed 205  finished: train success 0.94
+  dqn             seed 206  finished: train success 0.80
+  dqn             seed 207  finished: train success 0.92
+  dqn             seed 208  finished: train success 0.84
+  dqn             seed 209  finished: train success 0.82
+  dqn_shaped      seed 200  finished: train success 0.98
+  dqn_shaped      seed 201  finished: train success 0.94
+  dqn_shaped      seed 202  finished: train success 0.96
+  dqn_shaped      seed 203  finished: train success 0.84
+  dqn_shaped      seed 204  finished: train success 0.94
+  dqn_shaped      seed 205  finished: train success 1.00
+  dqn_shaped      seed 206  finished: train success 0.94
+  dqn_shaped      seed 207  finished: train success 0.98
+  dqn_shaped      seed 208  finished: train success 0.94
+  dqn_shaped      seed 209  finished: train success 0.88
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent           split    seeds             success     path_efficiency               steps            mistakes             hazards
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.85 +/- 0.05       0.85 +/- 0.06      27.07 +/- 4.54      14.38 +/- 5.12       0.00 +/- 0.00
+dqn             unseen      10       0.48 +/- 0.09       0.48 +/- 0.09      58.25 +/- 7.69      48.93 +/- 8.66       0.00 +/- 0.00
+dqn_shaped      train       10       0.94 +/- 0.03       0.94 +/- 0.04      19.79 +/- 2.87       5.62 +/- 3.27       0.00 +/- 0.00
+dqn_shaped      unseen      10       0.54 +/- 0.11       0.53 +/- 0.10      53.64 +/- 9.10     43.31 +/- 10.09       0.00 +/- 0.00
+
+Episode reward, steps to goal (successful episodes only) and mistake types:
+agent           split    seeds        total_reward       steps_to_goal         hazard_rate          collisions            revisits
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.18 +/- 0.27      14.18 +/- 0.19       0.00 +/- 0.00       3.39 +/- 3.14      10.83 +/- 4.41
+dqn             unseen      10      -1.55 +/- 0.50      12.94 +/- 0.31       0.00 +/- 0.00      14.23 +/- 8.35      34.18 +/- 9.24
+dqn_shaped      train       10       0.61 +/- 0.13      14.66 +/- 0.13       0.00 +/- 0.00       0.35 +/- 0.53       5.21 +/- 3.33
+dqn_shaped      unseen      10      -0.99 +/- 0.42      13.77 +/- 0.25       0.00 +/- 0.00       3.01 +/- 1.94     39.84 +/- 10.05
+
+Success-rate differences (permutation test):
+  [train] dqn_shaped - dqn: +0.09  (p = 0.005)
+           dqn_shaped beats Neural Ned on success (p = 0.005). Not a fluke.
+  [unseen] dqn_shaped - dqn: +0.06  (p = 0.366)
+           dqn_shaped vs Neural Ned on success: difference +0.06, p = 0.366. The jury is still out; more seeds needed before anyone gloats.
+
+Learning speed: greedy success averaged over training checkpoints (permutation test):
+  dqn_shaped 0.914 vs dqn 0.816: difference +0.098  (p < 0.001)
+
+Other differences (permutation test):
+  [train] total_reward  dqn_shaped - dqn: +0.436  (p = 0.002)
+  [unseen] total_reward  dqn_shaped - dqn: +0.558  (p = 0.070)
+  [train] steps_to_goal dqn_shaped - dqn: +0.480  (p < 0.001)
+  [unseen] steps_to_goal dqn_shaped - dqn: +0.827  (p < 0.001)
+  [train] hazards       dqn_shaped - dqn: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_shaped - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_shaped - dqn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_shaped - dqn: +0.000  (p = 1.000)
+  [train] collisions    dqn_shaped - dqn: -3.042  (p = 0.052)
+  [unseen] collisions    dqn_shaped - dqn: -11.220  (p = 0.004)
+
+Replay buffer at the end of training (transitions; mean over seeds):
+  dqn             added    119780  main overwrote     99780
+  dqn_shaped      added    105753  main overwrote     85753
+
+Files written to runs\experiments_shaping\shaping_generalization
+

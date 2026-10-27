@@ -1,0 +1,119 @@
+Experiment shaping_speed: One fresh 9x9 maze (layout 7000): does potential-based reward shaping (strength 1.0) make tabular Q and DQN learn faster? Seeds 200-209.
+  tabular_q       seed 200  finished: train success 1.00
+  tabular_q       seed 201  finished: train success 1.00
+  tabular_q       seed 202  finished: train success 1.00
+  tabular_q       seed 203  finished: train success 1.00
+  tabular_q       seed 204  finished: train success 1.00
+  tabular_q       seed 205  finished: train success 1.00
+  tabular_q       seed 206  finished: train success 1.00
+  tabular_q       seed 207  finished: train success 1.00
+  tabular_q       seed 208  finished: train success 1.00
+  tabular_q       seed 209  finished: train success 1.00
+  tabular_q_shaped seed 200  finished: train success 1.00
+  tabular_q_shaped seed 201  finished: train success 1.00
+  tabular_q_shaped seed 202  finished: train success 1.00
+  tabular_q_shaped seed 203  finished: train success 1.00
+  tabular_q_shaped seed 204  finished: train success 1.00
+  tabular_q_shaped seed 205  finished: train success 1.00
+  tabular_q_shaped seed 206  finished: train success 1.00
+  tabular_q_shaped seed 207  finished: train success 1.00
+  tabular_q_shaped seed 208  finished: train success 1.00
+  tabular_q_shaped seed 209  finished: train success 1.00
+  dqn             seed 200  finished: train success 1.00
+  dqn             seed 201  finished: train success 1.00
+  dqn             seed 202  finished: train success 1.00
+  dqn             seed 203  finished: train success 1.00
+  dqn             seed 204  finished: train success 0.00
+  dqn             seed 205  finished: train success 0.00
+  dqn             seed 206  finished: train success 1.00
+  dqn             seed 207  finished: train success 0.00
+  dqn             seed 208  finished: train success 1.00
+  dqn             seed 209  finished: train success 0.00
+  dqn_shaped      seed 200  finished: train success 1.00
+  dqn_shaped      seed 201  finished: train success 1.00
+  dqn_shaped      seed 202  finished: train success 1.00
+  dqn_shaped      seed 203  finished: train success 1.00
+  dqn_shaped      seed 204  finished: train success 1.00
+  dqn_shaped      seed 205  finished: train success 1.00
+  dqn_shaped      seed 206  finished: train success 1.00
+  dqn_shaped      seed 207  finished: train success 1.00
+  dqn_shaped      seed 208  finished: train success 1.00
+  dqn_shaped      seed 209  finished: train success 1.00
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent           split    seeds             success     path_efficiency               steps            mistakes             hazards
+----------------------------------------------------------------------------------------------------------------------------------
+tabular_q       train       10       1.00 +/- 0.00       1.00 +/- 0.00      16.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+tabular_q_shapedtrain       10       1.00 +/- 0.00       1.00 +/- 0.00      16.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+dqn             train       10       0.60 +/- 0.37       0.60 +/- 0.37     49.60 +/- 31.03     39.70 +/- 36.66       0.00 +/- 0.00
+dqn_shaped      train       10       1.00 +/- 0.00       1.00 +/- 0.00      16.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+
+Episode reward, steps to goal (successful episodes only) and mistake types:
+agent           split    seeds        total_reward       steps_to_goal         hazard_rate          collisions            revisits
+----------------------------------------------------------------------------------------------------------------------------------
+tabular_q       train       10       0.84 +/- 0.00      16.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+tabular_q_shapedtrain       10       0.84 +/- 0.00      16.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+dqn             train       10      -1.31 +/- 2.10      16.00 +/- 0.00       0.00 +/- 0.00     19.60 +/- 29.56     19.70 +/- 29.71
+dqn_shaped      train       10       0.84 +/- 0.00      16.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00       0.00 +/- 0.00
+steps_to_goal leaves out seeds that never reached the goal: dqn/train: 6 of 10 seeds
+
+Success-rate differences (permutation test):
+  [train] tabular_q_shaped - tabular_q: +0.00  (p = 1.000)
+           tabular_q_shaped and The Spreadsheet tied on success. Shake hands.
+  [train] dqn - tabular_q: -0.40  (p = 0.091)
+           Neural Ned vs The Spreadsheet on success: difference -0.40, p = 0.091. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_shaped - tabular_q: +0.00  (p = 1.000)
+           dqn_shaped and The Spreadsheet tied on success. Shake hands.
+  [train] dqn - tabular_q_shaped: -0.40  (p = 0.091)
+           Neural Ned vs tabular_q_shaped on success: difference -0.40, p = 0.091. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_shaped - tabular_q_shaped: +0.00  (p = 1.000)
+           dqn_shaped and tabular_q_shaped tied on success. Shake hands.
+  [train] dqn_shaped - dqn: +0.40  (p = 0.093)
+           dqn_shaped vs Neural Ned on success: difference +0.40, p = 0.093. The jury is still out; more seeds needed before anyone gloats.
+
+Learning speed: greedy success averaged over training checkpoints (permutation test):
+  tabular_q_shaped 0.986 vs tabular_q 0.931: difference +0.054  (p < 0.001)
+  dqn 0.388 vs tabular_q 0.931: difference -0.544  (p < 0.001)
+  dqn_shaped 0.794 vs tabular_q 0.931: difference -0.138  (p < 0.001)
+  dqn 0.388 vs tabular_q_shaped 0.986: difference -0.598  (p < 0.001)
+  dqn_shaped 0.794 vs tabular_q_shaped 0.986: difference -0.192  (p < 0.001)
+  dqn_shaped 0.794 vs dqn 0.388: difference +0.406  (p = 0.002)
+
+Other differences (permutation test):
+  [train] total_reward  tabular_q_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] total_reward  dqn - tabular_q: -2.150  (p = 0.091)
+  [train] total_reward  dqn_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] total_reward  dqn - tabular_q_shaped: -2.150  (p = 0.091)
+  [train] total_reward  dqn_shaped - tabular_q_shaped: +0.000  (p = 1.000)
+  [train] total_reward  dqn_shaped - dqn: +2.150  (p = 0.093)
+  [train] steps_to_goal tabular_q_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn - tabular_q: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn - tabular_q_shaped: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn_shaped - tabular_q_shaped: +0.000  (p = 1.000)
+  [train] steps_to_goal dqn_shaped - dqn: +0.000  (p = 1.000)
+  [train] hazards       tabular_q_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] hazards       dqn - tabular_q: +0.000  (p = 1.000)
+  [train] hazards       dqn_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] hazards       dqn - tabular_q_shaped: +0.000  (p = 1.000)
+  [train] hazards       dqn_shaped - tabular_q_shaped: +0.000  (p = 1.000)
+  [train] hazards       dqn_shaped - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   tabular_q_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn - tabular_q: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn - tabular_q_shaped: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_shaped - tabular_q_shaped: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_shaped - dqn: +0.000  (p = 1.000)
+  [train] collisions    tabular_q_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] collisions    dqn - tabular_q: +19.600  (p = 0.479)
+  [train] collisions    dqn_shaped - tabular_q: +0.000  (p = 1.000)
+  [train] collisions    dqn - tabular_q_shaped: +19.600  (p = 0.479)
+  [train] collisions    dqn_shaped - tabular_q_shaped: +0.000  (p = 1.000)
+  [train] collisions    dqn_shaped - dqn: -19.600  (p = 0.475)
+
+Replay buffer at the end of training (transitions; mean over seeds):
+  dqn             added     25470  main overwrote      6654
+  dqn_shaped      added     17558  main overwrote         0
+
+Files written to runs\experiments_shaping\shaping_speed
+

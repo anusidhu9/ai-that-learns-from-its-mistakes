@@ -139,3 +139,13 @@ def test_train_on_my_maze():
     assert list(table["evaluated on"]) == ["training layout(s)"]
     assert "no unseen layouts" in message
     assert "trained on your own maze" in app.record_replay(state, "Unseen layout", 0)[1]
+
+
+def test_train_with_reward_shaping():
+    state = app.new_session()
+    for last in app.train_agent_ui("maze", "tabular_q", 30, 0, 75, state, False, True):
+        pass
+    trainer = state["trainer"]
+    assert trainer.env.config.rewards.shaping == app.SHAPING_STRENGTH
+    assert any(r["r_shaping"] != 0.0 for r in trainer.history)
+    assert "shaping" in app.ABOUT

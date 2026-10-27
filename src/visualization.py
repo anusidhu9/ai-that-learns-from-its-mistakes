@@ -18,27 +18,34 @@ from src.envs import ACTION_NAMES, EMPTY, GOAL, HAZARD, WALL, GridWorld
 from src.evaluation import mean_ci
 from src.fun import event_line
 
-AGENT_ORDER = ("random", "tabular_q", "dqn", "dqn_per", "dqn_mistake", "dqn_per_mistake",
-               "dqn_5k", "dqn_mistake_5k", "dqn_10k")
+AGENT_ORDER = ("random", "tabular_q", "tabular_q_shaped", "dqn", "dqn_shaped", "dqn_per",
+               "dqn_mistake", "dqn_per_mistake", "dqn_5k", "dqn_mistake_5k", "dqn_10k")
 AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn_per": "DQN + PER",
                 "dqn_mistake": "DQN + mistakes", "dqn_per_mistake": "DQN + PER + mistakes",
                 # long_memory_mistakes arms (buffer size in brackets)
                 "dqn_5k": "DQN (5k)", "dqn_mistake_5k": "DQN + mistake memory (5k + 5k)",
-                "dqn_10k": "DQN (10k)"}
+                "dqn_10k": "DQN (10k)",
+                # reward shaping arms
+                "tabular_q_shaped": "Tabular Q + shaping", "dqn_shaped": "DQN + shaping"}
 # Mistake-aware variants share their base algorithm's hue (no palette hue left
 # passes the colorblind checks beside orange and aqua) and add a second
-# encoding instead: dash-dot lines, square markers and hatched bars.
+# encoding instead: dash-dot lines, square markers and hatched bars. Shaped
+# variants do the same with dotted lines, triangle markers and dotted bars.
 AGENT_COLORS = {"random": "#8a8a85", "tabular_q": "#2a78d6", "dqn": "#eb6834", "dqn_per": "#1baf7a",
                 "dqn_mistake": "#eb6834", "dqn_per_mistake": "#1baf7a",
-                "dqn_5k": "#eb6834", "dqn_mistake_5k": "#eb6834", "dqn_10k": "#6250d6"}
+                "dqn_5k": "#eb6834", "dqn_mistake_5k": "#eb6834", "dqn_10k": "#6250d6",
+                "tabular_q_shaped": "#2a78d6", "dqn_shaped": "#eb6834"}
 AGENT_LINESTYLES = {"random": "--", "dqn_mistake": "-.", "dqn_per_mistake": "-.",
-                    "dqn_mistake_5k": "-."}
-AGENT_MARKERS = {"dqn_mistake": "s", "dqn_per_mistake": "s", "dqn_mistake_5k": "s"}
-AGENT_HATCHES = {"dqn_mistake": "///", "dqn_per_mistake": "///", "dqn_mistake_5k": "///"}
+                    "dqn_mistake_5k": "-.", "tabular_q_shaped": ":", "dqn_shaped": ":"}
+AGENT_MARKERS = {"dqn_mistake": "s", "dqn_per_mistake": "s", "dqn_mistake_5k": "s",
+                 "tabular_q_shaped": "^", "dqn_shaped": "^"}
+AGENT_HATCHES = {"dqn_mistake": "///", "dqn_per_mistake": "///", "dqn_mistake_5k": "///",
+                 "tabular_q_shaped": "..", "dqn_shaped": ".."}
 MISTAKE_TYPES = ("collision", "revisit", "hazard", "timeout")
 MISTAKE_COLORS = {"collision": "#e87ba4", "revisit": "#6250d6", "hazard": "#e34948",
                   "timeout": "#eda100"}
 REWARD_PARTS = ("r_goal", "r_step", "r_collision", "r_hazard", "r_revisit", "r_timeout")
+SHAPING_PART = "r_shaping"  # drawn only for runs that used shaping
 
 INK, MUTED, GRIDLINE, SURFACE = "#2b2b29", "#6b6b66", "#e6e5e0", "#ffffff"
 EARLY_COLOR, LATE_COLOR = "#86b6ef", "#1c5cab"   # one hue, light = early, dark = late
@@ -344,9 +351,12 @@ def reward_breakdown_figure(history: List[dict], window: int = 50) -> Figure:
         _empty(ax, "No episodes yet")
         return fig
     window = min(window, len(history))
-    early = [np.mean([r[p] for r in history[:window]]) for p in REWARD_PARTS]
-    late = [np.mean([r[p] for r in history[-window:]]) for p in REWARD_PARTS]
-    y = np.arange(len(REWARD_PARTS))
+    parts = REWARD_PARTS
+    if any(abs(r.get(SHAPING_PART, 0.0)) > 1e-12 for r in history):
+        parts = parts + (SHAPING_PART,)
+    early = [np.mean([r.get(p, 0.0) for r in history[:window]]) for p in parts]
+    late = [np.mean([r.get(p, 0.0) for r in history[-window:]]) for p in parts]
+    y = np.arange(len(parts))
     h = 0.38
     ax.barh(y - h / 2, early, height=h - 0.04, color=EARLY_COLOR, label=f"first {window}")
     ax.barh(y + h / 2, late, height=h - 0.04, color=LATE_COLOR, label=f"last {window}")
@@ -356,7 +366,7 @@ def reward_breakdown_figure(history: List[dict], window: int = 50) -> Figure:
                 ax.text(value, yi + offset, f" {value:+.2f} ", va="center", fontsize=8,
                         color=INK, ha="left" if value > 0 else "right")
     ax.axvline(0, color=MUTED, linewidth=1)
-    ax.set_yticks(y, [p[2:] for p in REWARD_PARTS])
+    ax.set_yticks(y, [p[2:] if p != SHAPING_PART else "shaping\n(hint only)" for p in parts])
     ax.invert_yaxis()
     ax.grid(axis="y", visible=False)
     _title(ax, "Where the reward comes from (mean per episode)")
@@ -584,6 +594,10 @@ def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int
     long_memory = load_experiment(results_dir / "long_memory_mistakes")
     save(experiment_bars_figure(long_memory["summary"], "success"), "long_memory_success.png")
     save(experiment_curves_figure(long_memory["curves"], "success"), "long_memory_curves.png")
+    speed = load_experiment(results_dir / "shaping_speed")
+    save(experiment_curves_figure(speed["curves"], "success"), "shaping_speed_curves.png")
+    shaped = load_experiment(results_dir / "shaping_generalization")
+    save(experiment_bars_figure(shaped["summary"], "success"), "shaping_generalization_success.png")
 
     trainer = Trainer(TrainConfig(env_preset="maze", agent="tabular_q", episodes=400, seed=seed,
                                   agent_kwargs={"epsilon": {"decay_episodes": 300}}))

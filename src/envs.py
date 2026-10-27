@@ -13,6 +13,10 @@ exactly the same information.
 Mistakes (collision, hazard, revisit, timeout) are reported per step in
 `info["events"]`, logged in `env.mistake_log`, and summarised in
 `info["episode"]` when an episode ends.
+
+Optional reward shaping (`RewardConfig.shaping`) adds a potential-based hint
+toward the goal to the reward the agent learns from; the episode's
+`total_reward` stays the task reward so shaped and unshaped runs compare.
 """
 from __future__ import annotations
 
@@ -34,7 +38,16 @@ Pos = Tuple[int, int]
 
 @dataclass(frozen=True)
 class RewardConfig:
-    """Reward for each event. Penalties are negative and add to the step cost."""
+    """Reward for each event. Penalties are negative and add to the step cost.
+
+    shaping > 0 adds potential-based shaping (Ng, Harada & Russell, 1999):
+    shaping * (shaping_gamma * phi(next) - phi(now)) per step, where phi is
+    minus the maze distance to the goal (walls block it, hazards don't),
+    divided by the largest such distance in the layout, so phi is in [-1, 0].
+    phi is 0 once the episode terminates. With shaping_gamma equal to the
+    agent's discount this never changes which policy is optimal, so an agent
+    can't profit from it by walking in circles. Off (0) by default.
+    """
 
     goal: float = 1.0
     step: float = -0.01
@@ -42,6 +55,8 @@ class RewardConfig:
     hazard: float = -0.5
     revisit: float = -0.02
     timeout: float = -0.1
+    shaping: float = 0.0
+    shaping_gamma: float = 0.99
 
 
 @dataclass
@@ -304,6 +319,7 @@ class GridWorld:
         self.config = config if config is not None else EnvConfig()
         self.rng = np.random.default_rng(seed)
         self._custom_layout: Optional[Tuple[np.ndarray, Pos, Pos]] = None
+        self._potential: Optional[np.ndarray] = None
         self._layout_cache: Dict[int, Tuple[np.ndarray, Pos, Pos]] = {}
         self.grid: Optional[np.ndarray] = None
         self.start: Pos = (1, 1)
@@ -359,13 +375,14 @@ class GridWorld:
         self.grid = grid.copy()
         self.start, self.goal, self.pos = start, goal, start
         self.optimal_length = shortest_path_length(self.grid, start, goal, avoid_hazards=True)
+        self._potential = self._potentials() if self.config.rewards.shaping else None
         r = self.config.view_radius
         self._padded = np.pad(self.grid, r, constant_values=WALL)
         self.steps = 0
         self.done = False
         self.visited = {start}
         self.mistake_log = []
-        self.stats = {"total_reward": 0.0, "collision": 0, "hazard": 0,
+        self.stats = {"total_reward": 0.0, "shaping": 0.0, "collision": 0, "hazard": 0,
                       "revisit": 0, "timeout": 0, "success": False}
         return self._observe(), {"pos": self.pos, "events": [], "layout_seed": self.layout_seed}
 
@@ -382,6 +399,7 @@ class GridWorld:
         reward = rw.step
         terminated = False
 
+        before = self.pos
         dr, dc = ACTIONS[action]
         nr, nc = self.pos[0] + dr, self.pos[1] + dc
         h, w = self.grid.shape
@@ -412,6 +430,11 @@ class GridWorld:
 
         self.done = terminated or truncated
         self.stats["total_reward"] += reward
+        if self._potential is not None:
+            after = 0.0 if terminated else self._potential[self.pos]
+            shaping = rw.shaping * (rw.shaping_gamma * after - self._potential[before])
+            self.stats["shaping"] += shaping
+            reward += shaping  # learned from, but not part of total_reward
         for event in events:
             if event in MISTAKE_EVENTS:
                 self.stats[event] += 1
@@ -437,6 +460,7 @@ class GridWorld:
             "timeout": s["timeout"],
             "mistakes": s["collision"] + s["hazard"] + s["revisit"] + s["timeout"],
             "optimal_length": self.optimal_length,
+            "shaping": round(s["shaping"], 6),
         }
 
     def to_ascii(self) -> str:
@@ -454,6 +478,21 @@ class GridWorld:
             return self._observe()
         finally:
             self.pos = saved
+
+    def potential(self, pos: Pos) -> float:
+        """Shaping potential of a cell in the current layout (see RewardConfig)."""
+        table = self._potential if self._potential is not None else self._potentials()
+        return float(table[tuple(pos)])
+
+    def _potentials(self) -> np.ndarray:
+        """phi for every cell: -(maze distance to goal) / (largest distance);
+        -1 for cells the goal can't be reached from."""
+        dist = _bfs_distances(self.grid, self.goal)
+        far = max(max(dist.values()), 1)
+        phi = np.full(self.grid.shape, -1.0)
+        for cell, d in dist.items():
+            phi[cell] = -d / far
+        return phi
 
     def render_text(self) -> str:
         """ASCII picture: '#' wall, '.' empty, 'H' hazard, 'G' goal, 'A' agent."""

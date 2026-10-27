@@ -1,3 +1,4 @@
+import csv
 import json
 import math
 import shutil
@@ -63,7 +64,8 @@ def test_reward_breakdown_formula():
                "revisits": 3, "timeout": 0}
     rb = reward_breakdown(summary, RewardConfig())
     assert rb == pytest.approx({"r_goal": 1.0, "r_step": -0.1, "r_collision": -0.1,
-                                "r_hazard": -0.5, "r_revisit": -0.06, "r_timeout": 0.0})
+                                "r_hazard": -0.5, "r_revisit": -0.06, "r_timeout": 0.0,
+                                "r_shaping": 0.0})
 
 
 def test_run_episode_update_stats_and_efficiency():
@@ -330,3 +332,30 @@ def test_configs_without_layout_text_still_load():
     old = json.loads(TrainConfig().to_json())
     del old["layout_text"]
     assert TrainConfig(**old).layout_text is None
+
+
+def test_old_logs_without_shaping_column_still_load(tmp_path):
+    run = tmp_path / "run"
+    Trainer(TrainConfig(**TABULAR), run).train(episodes=5)
+    old_fields = [f for f in LOG_FIELDS if f != "r_shaping"]
+    rows = load_history(run)
+    with open(run / EPISODES_FILE, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=old_fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    assert [r["r_shaping"] for r in load_history(run)] == [0.0] * 5
+    resumed = Trainer.resume(run)
+    resumed.train(episodes=2)
+    assert len(load_history(run)) == 7
+
+
+def test_shaped_training_logs_shaping_separately(tmp_path):
+    config = TrainConfig(**{**TABULAR, "env_overrides": {"rewards": {"shaping": 1.0}}})
+    trainer = Trainer(config, tmp_path / "run")
+    trainer.train(episodes=5)
+    rows = load_history(tmp_path / "run")
+    assert any(r["r_shaping"] != 0.0 for r in rows)
+    for r in rows:  # total_reward is the task reward: the event parts without shaping
+        parts = sum(r[k] for k in ("r_goal", "r_step", "r_collision", "r_hazard",
+                                   "r_revisit", "r_timeout"))
+        assert r["total_reward"] == pytest.approx(parts, abs=1e-5)

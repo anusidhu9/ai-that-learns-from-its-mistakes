@@ -7,6 +7,7 @@ import pytest
 from src.agents import EpsilonSchedule, RandomAgent, TabularQAgent
 from src.envs import make_env
 from src.evaluation import (CURVE_FILE, FINAL_FILE, METRICS, Experiment, compare_agents,
+                            curve_means,
                             evaluate_agent, format_summary, load_experiment, mean_ci,
                             permutation_test, run_experiment, summarize)
 from src.training import train_agent
@@ -373,3 +374,16 @@ def test_parallel_workers_give_the_same_results(tmp_path):
     assert parallel["results"] == serial["results"]
     assert parallel["curves"] == serial["curves"]
     assert parallel["buffers"] == serial["buffers"]
+
+
+def test_arm_env_overrides_and_curve_means():
+    exp = Experiment("x", "maze", env_overrides={"layout_seed": 3},
+                     agents=("dqn", "dqn_shaped"), agent_types={"dqn_shaped": "dqn"},
+                     arm_env_overrides={"dqn_shaped": {"rewards": {"shaping": 1.0}}})
+    plain, shaped = exp.train_config("dqn", 0), exp.train_config("dqn_shaped", 0)
+    assert plain.env_overrides == {"layout_seed": 3}
+    assert shaped.env_overrides == {"layout_seed": 3, "rewards": {"shaping": 1.0}}
+    assert shaped.agent == "dqn"
+    curves = [{"agent": "a", "seed": 0, "episode": e, "success": s}
+              for e, s in [(0, 0.0), (25, 0.5), (50, 1.0)]]
+    assert curve_means(curves) == [{"agent": "a", "seed": 0, "split": "curve", "success": 0.75}]
