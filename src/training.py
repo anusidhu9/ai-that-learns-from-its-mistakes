@@ -29,7 +29,7 @@ import torch
 
 from src.agents import DQN_NICKNAMES, DQNAgent, EpsilonSchedule, make_agent
 from src.envs import (EnvConfig, GridWorld, PRESETS, RewardConfig, check_layout,
-                      parse_layout)
+                      parse_layout, rank_layouts)
 
 PathLike = Union[str, Path]
 
@@ -141,6 +141,8 @@ class TrainConfig:
     EpsilonSchedule). layout_text, if set, is a hand-drawn maze (see
     GridWorld.from_ascii) used instead of the preset's generated layouts; the
     preset still supplies everything else (observation mode, rewards, limits).
+    curriculum, if set ({"start": k0, "full_at": E}), trains on the easiest
+    layouts of layout_pool first (see curriculum_size); it needs a layout_pool.
     """
 
     env_preset: str = "maze"
@@ -152,6 +154,7 @@ class TrainConfig:
     checkpoint_every: int = 50
     save_buffer: bool = True        # DQN: store replay buffer for exact resumption
     layout_text: Optional[str] = None
+    curriculum: Optional[dict] = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -190,6 +193,14 @@ def build_agent(config: TrainConfig, env: GridWorld):
     return make_agent(config.agent, env.obs_size, env.n_actions, seed=config.seed, **kwargs)
 
 
+def curriculum_size(episode: int, n_layouts: int, start: int, full_at: int) -> int:
+    """How many of the easiest layouts episode `episode` may draw from: `start`
+    at episode 0, growing linearly to all `n_layouts` at episode `full_at`."""
+    if episode >= full_at:
+        return n_layouts
+    return min(n_layouts, start + (n_layouts - start) * episode // full_at)
+
+
 # ---------------------------------------------------------------------------
 # Trainer
 # ---------------------------------------------------------------------------
@@ -212,10 +223,22 @@ class Trainer:
         self.agent = build_agent(config, self.env)
         self.history: List[dict] = []
         self.mistakes: List[dict] = []
+        self._curriculum: Optional[List[int]] = None
+        if config.curriculum is not None:
+            pool = self.env.config.layout_pool
+            start, full_at = config.curriculum["start"], config.curriculum["full_at"]
+            if pool is None or config.layout_text:
+                raise ValueError("a curriculum needs a layout_pool (and no layout_text)")
+            if not 1 <= start <= len(pool) or full_at < 1:
+                raise ValueError("curriculum needs 1 <= start <= len(layout_pool), full_at >= 1")
+            self._curriculum = rank_layouts(self.env.config, pool)
         if self.run_dir is not None:
             self.run_dir.mkdir(parents=True, exist_ok=True)
             config_path = self.run_dir / CONFIG_FILE
-            if config_path.exists() and config_path.read_text() != config.to_json():
+            # Compared as configs, not text, so run dirs saved before a field
+            # was added (it then takes its default) still resume.
+            if config_path.exists() and \
+                    TrainConfig.from_json(config_path.read_text()) != config:
                 raise FileExistsError(f"{self.run_dir} holds a different run; "
                                       "use Trainer.resume() or a new run_dir")
             config_path.write_text(config.to_json())
@@ -261,8 +284,12 @@ class Trainer:
         new_rows = []
         while self.episodes_done < target:
             first = self.episodes_done == 0
-            summary = run_episode(self.env, self.agent, train=True,
-                                  seed=self.config.seed if first else None)
+            if self._curriculum is None:
+                summary = run_episode(self.env, self.agent, train=True,
+                                      seed=self.config.seed if first else None)
+            else:
+                summary = run_episode(self.env, self.agent, train=True,
+                                      layout_seed=self._curriculum_layout(first))
             row = self._record(summary)
             new_rows.append(row)
             if self.run_dir is not None and self.episodes_done % self.config.checkpoint_every == 0:
@@ -272,6 +299,15 @@ class Trainer:
         if self.run_dir is not None and new_rows:
             self.save_checkpoint()
         return new_rows
+
+    def _curriculum_layout(self, first: bool) -> int:
+        # One draw from the environment's generator, as a layout_pool draw makes,
+        # so a run stays deterministic and resumable from its checkpoint.
+        if first:
+            self.env.rng = np.random.default_rng(self.config.seed)
+        k = curriculum_size(self.episodes_done, len(self._curriculum),
+                            self.config.curriculum["start"], self.config.curriculum["full_at"])
+        return self._curriculum[int(self.env.rng.integers(k))]
 
     # -- checkpoints ----------------------------------------------------------
 

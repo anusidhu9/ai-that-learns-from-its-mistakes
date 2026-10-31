@@ -39,6 +39,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **Prioritized replay did not help** on these small tasks.
 - **A hint toward the goal speeds up learning.** With potential-based reward shaping, tabular Q and DQN learned a fresh maze sooner (pre-registered, p = 0.002 each after correction). It did not measurably help DQN on new mazes (0.54 vs 0.48, p = 0.366). See [below](#reward-shaping).
 - **3-step returns made DQN learn a maze much faster; dueling heads didn't help.** On a fresh maze, 3-step DQN's learning speed was 0.86 against 0.37 (pre-registered, p = 0.0003 after correction, ahead in all 10 seeds). Neither change measurably helped on new mazes. See [below](#dueling-and-n-step-dqn).
+- **Training on easy mazes first made DQN learn more slowly.** With the same 50 mazes in easiest-first order, DQN learned them more slowly (0.72 vs 0.85, pre-registered, p = 0.0003 after correction, behind in all 10 seeds). On new mazes it was 0.49 vs 0.57, not a significant difference (p = 0.093). See [below](#training-curriculum).
 - **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
 
 **What it does not (yet) support**
@@ -104,6 +105,21 @@ Two standard DQN improvements, tested the same way (one [protocol](results/dqn_v
 Every 3-step run solved the fixed maze by episode 150 and kept it; plain DQN never solved it in 2 of 10 seeds. As with reward shaping, faster learning on one maze did not carry over to mazes the agent had never seen.
 
 ![Greedy success during training, DQN variants](docs/figures/dqn_variants_speed_curves.png)
+
+### Training curriculum
+
+Does it help to start with the easy mazes? In [`curriculum_generalization`](results/curriculum_generalization/ANALYSIS.md) ([protocol](results/curriculum_generalization/PROTOCOL.md), written before the run, fresh seeds 400–409), both arms train DQN with a 5×5 local view on the **same 50 mazes** for 3,000 episodes. Plain DQN draws a maze at random each episode. **DQN + curriculum** (`TrainConfig.curriculum`) ranks the mazes by shortest path, then by dead ends, and starts with the 10 easiest, adding the rest one by one until it uses all 50 from episode 1,500.
+
+| Question | DQN | DQN + curriculum | Verdict |
+|---|---|---|---|
+| Does it learn the training mazes faster? | 0.851 | 0.722 | **No: slower** (p = 0.0003, behind in 10/10 seeds) |
+| Does it solve more **held-out** mazes? | 0.57 ± 0.06 | 0.49 ± 0.08 | No evidence (p = 0.093, behind in 8/10 seeds) |
+
+*p-values are Holm-corrected.*
+
+The gap lasted long after the curriculum ended: at episode 2,500, with both arms on the same 50 mazes for 1,000 episodes, the curriculum arm was still 0.15 behind. With a fixed budget, extra practice on easy mazes came out of the hard ones (339 against 586 episodes on the 10 hardest), and the hard mazes arrived after most exploration was over.
+
+![Greedy success during training, curriculum](docs/figures/curriculum_curves.png)
 
 ## Quick start
 
@@ -226,7 +242,7 @@ LICENSE             MIT License
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
 - 5–10 seeds per experiment: enough to show large differences, not small ones.
-- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0) and one n for multi-step returns (3). Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
+- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3) and one curriculum schedule. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 
 See [REPORT.md](REPORT.md) for the full discussion. To write up a new experiment, start from [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md); to publish your own copy, follow [docs/PUBLISHING.md](docs/PUBLISHING.md).

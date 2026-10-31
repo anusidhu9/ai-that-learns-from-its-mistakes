@@ -2,8 +2,9 @@ import numpy as np
 import pytest
 
 from src.envs import (EMPTY, GOAL, HAZARD, PRESETS, WALL, EnvConfig, GridWorld,
-                      RewardConfig, check_layout, generate_layout, layout_to_ascii, make_env,
-                      parse_layout, shortest_path_length)
+                      RewardConfig, check_layout, count_dead_ends, generate_layout,
+                      layout_to_ascii, make_env, parse_layout, rank_layouts,
+                      shortest_path_length)
 
 UP, RIGHT, DOWN, LEFT = 0, 1, 2, 3
 RW = RewardConfig()
@@ -356,3 +357,35 @@ def test_discounted_shaping_telescopes(seed):
     assert total == pytest.approx(gamma ** t * end - phi0)
     assert info["episode"]["total_reward"] == plain.episode_summary()["total_reward"]
     assert info["episode"]["shaping"] != 0.0 and plain.episode_summary()["shaping"] == 0.0
+
+
+# -- curriculum ordering ---------------------------------------------------------------
+
+def test_count_dead_ends():
+    grid, start, goal = parse_layout("""
+#######
+#S....#
+#.###.#
+#.#...#
+#.#.###
+#...G.#
+#######
+""")
+    # only (5, 5) is a dead end; start and goal never count
+    assert count_dead_ends(grid, start, goal) == 1
+    grid[3, 4] = WALL  # now (3, 3) is one too, and (3, 5) above the cut
+    assert count_dead_ends(grid, start, goal) == 3
+
+
+def test_rank_layouts_orders_by_path_then_dead_ends_then_seed():
+    cfg = EnvConfig(**PRESETS["maze"])
+    seeds = list(range(40))
+    ranked = rank_layouts(cfg, reversed(seeds))
+    assert sorted(ranked) == seeds
+
+    def key(s):
+        grid, start, goal = generate_layout(cfg, s)
+        return shortest_path_length(grid, start, goal), count_dead_ends(grid, start, goal), s
+    keys = [key(s) for s in ranked]
+    assert keys == sorted(keys)
+    assert keys[0][0] < keys[-1][0]

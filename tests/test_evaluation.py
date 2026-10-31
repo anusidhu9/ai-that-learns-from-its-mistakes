@@ -387,3 +387,45 @@ def test_arm_env_overrides_and_curve_means():
     curves = [{"agent": "a", "seed": 0, "episode": e, "success": s}
               for e, s in [(0, 0.0), (25, 0.5), (50, 1.0)]]
     assert curve_means(curves) == [{"agent": "a", "seed": 0, "split": "curve", "success": 0.75}]
+
+
+def test_curriculum_protocol_settings():
+    from src.evaluation import EXPERIMENTS
+    exp = EXPERIMENTS["curriculum_generalization"]
+    assert exp.agents == ("dqn", "dqn_curriculum") and exp.seeds == tuple(range(400, 410))
+    assert (exp.episodes, exp.decay_episodes, exp.eval_every) == (3000, 2000, 500)
+    plain, curric = (exp.train_config(a, 400) for a in exp.agents)
+    assert plain.curriculum is None and curric.curriculum == {"start": 10, "full_at": 1500}
+    # identical except for the curriculum
+    assert {**json.loads(curric.to_json()), "curriculum": None} == json.loads(plain.to_json())
+
+
+def test_curriculum_layouts_and_seeds_are_fresh():
+    from src.evaluation import EXPERIMENTS
+    exp = EXPERIMENTS["curriculum_generalization"]
+    pool = tuple(exp.env_overrides["layout_pool"])
+    train, held = _layout_keys(exp, pool), _layout_keys(exp, exp.unseen_layouts)
+    assert len(train) == 50 and len(held) == 50 and not train & held
+    others = [e for n, e in EXPERIMENTS.items() if n != "curriculum_generalization"]
+    used_layouts = set()
+    for e in others:
+        used_layouts |= set(e.env_overrides.get("layout_pool") or ())
+        used_layouts |= set(e.unseen_layouts or ())
+        used_layouts.add(e.env_overrides.get("layout_seed", 0))
+    assert not (set(pool) | set(exp.unseen_layouts)) & used_layouts
+    assert not set(exp.seeds) & set().union(*(e.seeds for e in others))
+
+
+def test_curriculum_arm_smoke(tmp_path):
+    from src.training import load_history
+    exp = Experiment(name="tiny_curric", env_preset="maze",
+                     env_overrides={"layout_pool": list(range(6)), "obs_mode": "local"},
+                     agents=("tabular_q", "tabular_curric"), seeds=(0,), episodes=12,
+                     decay_episodes=8, eval_every=6, unseen_layouts=(100, 101),
+                     agent_types={"tabular_curric": "tabular_q"},
+                     arm_curriculum={"tabular_curric": {"start": 2, "full_at": 10}})
+    out = run_experiment(exp, tmp_path, log=quiet)
+    assert {r["agent"] for r in out["results"]} == {"tabular_q", "tabular_curric"}
+    first = [r["layout_seed"] for r in load_history(tmp_path / "tiny_curric" / "tabular_curric_s0")][:5]
+    assert len(set(first)) <= 2
+    assert load_experiment(tmp_path / "tiny_curric")["experiment"].arm_curriculum == exp.arm_curriculum

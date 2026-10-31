@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field, replace
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -245,6 +245,29 @@ def generate_layout(config: EnvConfig, layout_seed: int) -> Tuple[np.ndarray, Po
     _place_hazards(grid, start, goal, config.n_hazards, rng)
     grid[goal] = GOAL
     return grid, start, goal
+
+
+def count_dead_ends(grid: np.ndarray, start: Pos, goal: Pos) -> int:
+    """Open cells (other than start and goal) with exactly one open neighbour."""
+    h, w = grid.shape
+    count = 0
+    for r in range(h):
+        for c in range(w):
+            if grid[r, c] == WALL or (r, c) in (start, goal):
+                continue
+            open_neighbours = sum(0 <= r + dr < h and 0 <= c + dc < w and grid[r + dr, c + dc] != WALL
+                                  for dr, dc in ACTIONS)
+            count += int(open_neighbours == 1)
+    return count
+
+
+def rank_layouts(config: EnvConfig, layout_seeds: Sequence[int]) -> List[int]:
+    """Layout seeds from easiest to hardest (used to order a training curriculum):
+    by shortest hazard-free start-goal path, then by number of dead ends, then seed."""
+    def difficulty(seed: int) -> Tuple[int, int, int]:
+        grid, start, goal = generate_layout(config, seed)
+        return shortest_path_length(grid, start, goal), count_dead_ends(grid, start, goal), seed
+    return sorted((int(s) for s in layout_seeds), key=difficulty)
 
 
 # ---------------------------------------------------------------------------

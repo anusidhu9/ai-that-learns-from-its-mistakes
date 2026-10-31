@@ -11,7 +11,7 @@ from src.envs import EnvConfig, GridWorld, RewardConfig
 from src.training import (CHECKPOINT_FILE, EPISODES_FILE, LOG_FIELDS, MISTAKES_FILE,
                           TrainConfig, Trainer, build_agent, build_env, compare_phases,
                           format_phase_table, load_agent, load_history, load_mistakes,
-                          mistake_hotspots, reward_breakdown, run_episode)
+                          curriculum_size, mistake_hotspots, reward_breakdown, run_episode)
 
 TABULAR = dict(agent="tabular_q", agent_kwargs={"epsilon": {"decay_episodes": 20}},
                episodes=30, seed=3, checkpoint_every=5)
@@ -19,6 +19,10 @@ DQN = dict(agent="dqn", episodes=16, seed=1, checkpoint_every=4,
            env_overrides={"max_steps": 40},
            agent_kwargs={"hidden": [32], "learning_starts": 50, "buffer_size": 2000,
                          "batch_size": 16, "epsilon": {"decay_episodes": 10}})
+CURRIC = dict(agent="tabular_q", agent_kwargs={"epsilon": {"decay_episodes": 20}},
+              episodes=30, seed=3, checkpoint_every=5,
+              env_overrides={"layout_pool": list(range(20)), "obs_mode": "local"},
+              curriculum={"start": 3, "full_at": 20})
 DQN_PER_MISTAKE = {**DQN, "agent": "dqn_per_mistake",
                    "agent_kwargs": {**DQN["agent_kwargs"], "mistake_capacity": 300,
                                     "mistake_events": ["collision", "hazard"]}}
@@ -124,8 +128,8 @@ def test_in_memory_trainer_writes_nothing(tmp_path, monkeypatch):
 
 # -- checkpoints and exact resumption -------------------------------------------------------
 
-@pytest.mark.parametrize("cfg", [TABULAR, DQN, DQN_PER_MISTAKE],
-                         ids=["tabular", "dqn", "dqn_per_mistake"])
+@pytest.mark.parametrize("cfg", [TABULAR, DQN, DQN_PER_MISTAKE, CURRIC],
+                         ids=["tabular", "dqn", "dqn_per_mistake", "curriculum"])
 def test_resumed_run_matches_uninterrupted_run(tmp_path, cfg):
     full = tmp_path / "full"
     Trainer(TrainConfig(**cfg), full).train()
@@ -359,3 +363,46 @@ def test_shaped_training_logs_shaping_separately(tmp_path):
         parts = sum(r[k] for k in ("r_goal", "r_step", "r_collision", "r_hazard",
                                    "r_revisit", "r_timeout"))
         assert r["total_reward"] == pytest.approx(parts, abs=1e-5)
+
+
+# -- curriculum ------------------------------------------------------------------------
+
+def test_curriculum_size_grows_linearly_to_the_whole_pool():
+    sizes = [curriculum_size(e, 50, 10, 1500) for e in (0, 37, 38, 750, 1499, 1500, 2999)]
+    assert sizes == [10, 10, 11, 30, 49, 50, 50]
+    assert curriculum_size(0, 5, 5, 1) == 5
+
+
+def test_curriculum_draws_only_from_the_easiest_layouts_so_far():
+    from src.envs import rank_layouts
+    trainer = Trainer(TrainConfig(**CURRIC))
+    ranked = rank_layouts(trainer.env.config, CURRIC["env_overrides"]["layout_pool"])
+    rows = trainer.train()
+    for row in rows:
+        k = curriculum_size(row["episode"], 20, 3, 20)
+        assert row["layout_seed"] in ranked[:k], row["episode"]
+    assert {r["layout_seed"] for r in rows[:5]} <= set(ranked[:3])
+    assert len({r["layout_seed"] for r in rows[20:]} - set(ranked[:10])) > 0
+
+
+def test_curriculum_run_is_reproducible():
+    a = [r["layout_seed"] for r in Trainer(TrainConfig(**CURRIC)).train()]
+    b = [r["layout_seed"] for r in Trainer(TrainConfig(**CURRIC)).train()]
+    assert a == b
+
+
+def test_curriculum_needs_a_layout_pool():
+    with pytest.raises(ValueError, match="layout_pool"):
+        Trainer(TrainConfig(**{**TABULAR, "curriculum": {"start": 3, "full_at": 10}}))
+    with pytest.raises(ValueError):
+        Trainer(TrainConfig(**{**CURRIC, "curriculum": {"start": 21, "full_at": 10}}))
+
+
+def test_run_dirs_saved_before_curriculum_existed_still_resume(tmp_path):
+    run = tmp_path / "old"
+    Trainer(TrainConfig(**TABULAR), run).train(episodes=5)
+    old = json.loads((run / "config.json").read_text())
+    del old["curriculum"]
+    (run / "config.json").write_text(json.dumps(old, indent=2))
+    resumed = Trainer.resume(run)
+    assert resumed.episodes_done == 5 and resumed.config.curriculum is None

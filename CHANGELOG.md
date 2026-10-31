@@ -2,6 +2,24 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Training curriculum (Stage H)
+
+**Added**
+- `TrainConfig.curriculum` (`{"start": k0, "full_at": E}`): the Trainer draws each episode's maze from the easiest `curriculum_size(e)` mazes of `layout_pool`, growing linearly from k0 to the whole pool at episode E. One draw from the environment's generator per episode, as an ordinary pool draw makes, so curriculum runs are deterministic and resume exactly. Off by default; then training is unchanged (checked: 500 episodes of `dqn_variants_generalization` DQN seed 300 reproduce the saved log exactly).
+- `envs.rank_layouts` (difficulty order: shortest path, then dead ends, then seed) and `envs.count_dead_ends`. `Experiment.arm_curriculum` (per-arm curriculum).
+- Experiment `curriculum_generalization`, pre-registered in `results/curriculum_generalization/PROTOCOL.md` with fresh seeds (400–409) and layouts (9100–9149 training, 9200–9250 except 9225 held-out). Results, analysis, two figures, README and REPORT section 6.10. Chart style for `dqn_curriculum`.
+- 11 tests (254 in total): dead-end counting, the difficulty order, the schedule, that a curriculum run only ever draws from the easiest mazes allowed so far, reproducibility and exact resumption, that a curriculum needs a pool, the protocol settings, and that held-out mazes are fresh and **never identical to a training maze**.
+
+**Changed**
+- A run directory's saved config is now compared with the requested one as a config, not as text, so runs saved before a setting existed (it takes its default) still resume.
+
+**Found**
+- A 9×9 maze has only a 4×4 grid of rooms, so different layout seeds can generate the same maze. `shaping_generalization` (7223 = 7147) and `dqn_variants_generalization` (8224 = 8106) each had one held-out maze that was also a training maze. Re-evaluated without it, every conclusion is unchanged; post-hoc notes were added to both analyses.
+
+**Results**
+- `curriculum_generalization`: the curriculum made DQN learn its training mazes more slowly (learning speed 0.851 → 0.722, Holm-corrected p = 0.0003, behind in all 10 seeds). Held-out success 0.49 vs 0.57 (Holm-corrected p = 0.093): no evidence of a difference.
+- The first attempt was stopped for lack of memory with `--workers 4` and resumed with `--workers 2`; resumption does not change results.
+
 ## Dueling DQN and n-step returns (Stage D)
 
 **Added**

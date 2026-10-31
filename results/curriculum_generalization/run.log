@@ -1,0 +1,64 @@
+Experiment curriculum_generalization: Train DQN with a local 5x5 view on 50 fresh mazes (9100-9149), drawn uniformly or easiest-first (10 easiest mazes at first, all 50 from episode 1,500); test on 50 held-out mazes (9200-9250 except 9225). Seeds 400-409.
+  dqn             seed 400  finished: train success 0.94
+  dqn             seed 401  finished: train success 0.82
+  dqn             seed 402  finished: train success 0.98
+  dqn             seed 403  finished: train success 0.80
+  dqn             seed 404  finished: train success 0.82
+  dqn             seed 405  finished: train success 0.94
+  dqn             seed 406  finished: train success 0.98
+  dqn             seed 407  finished: train success 0.88
+  dqn             seed 408  finished: train success 0.92
+  dqn             seed 409  finished: train success 0.92
+  dqn_curriculum  seed 400  finished: train success 0.82
+  dqn_curriculum  seed 401  finished: train success 0.80
+  dqn_curriculum  seed 402  finished: train success 0.84
+  dqn_curriculum  seed 403  finished: train success 0.76
+  dqn_curriculum  seed 404  finished: train success 0.94
+  dqn_curriculum  seed 405  finished: train success 0.92
+  dqn_curriculum  seed 406  finished: train success 0.84
+  dqn_curriculum  seed 407  finished: train success 0.84
+  dqn_curriculum  seed 408  finished: train success 0.84
+  dqn_curriculum  seed 409  finished: train success 0.82
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent           split    seeds             success     path_efficiency               steps            mistakes             hazards
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.90 +/- 0.05       0.89 +/- 0.05      22.85 +/- 3.97       9.68 +/- 4.70       0.00 +/- 0.00
+dqn             unseen      10       0.57 +/- 0.06       0.57 +/- 0.06      50.67 +/- 5.34      40.49 +/- 6.16       0.00 +/- 0.00
+dqn_curriculum  train       10       0.84 +/- 0.04       0.83 +/- 0.04      27.64 +/- 3.15      15.15 +/- 3.72       0.00 +/- 0.00
+dqn_curriculum  unseen      10       0.49 +/- 0.08       0.49 +/- 0.08      57.60 +/- 6.78      48.87 +/- 7.87       0.00 +/- 0.00
+
+Episode reward, steps to goal (successful episodes only) and mistake types:
+agent           split    seeds        total_reward       steps_to_goal         hazard_rate          collisions            revisits
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.42 +/- 0.19      14.27 +/- 0.18       0.00 +/- 0.00       1.71 +/- 1.50       7.88 +/- 4.91
+dqn             unseen      10      -1.00 +/- 0.30      13.72 +/- 0.34       0.00 +/- 0.00       7.44 +/- 4.62      32.62 +/- 6.98
+dqn_curriculum  train       10       0.06 +/- 0.23      14.05 +/- 0.21       0.00 +/- 0.00       6.31 +/- 3.65       8.68 +/- 3.27
+dqn_curriculum  unseen      10      -1.59 +/- 0.39      13.48 +/- 0.13       0.00 +/- 0.00      16.05 +/- 6.26      32.31 +/- 9.15
+
+Success-rate differences (permutation test):
+  [train] dqn_curriculum - dqn: -0.06  (p = 0.058)
+           dqn_curriculum vs Neural Ned on success: difference -0.06, p = 0.058. The jury is still out; more seeds needed before anyone gloats.
+  [unseen] dqn_curriculum - dqn: -0.08  (p = 0.093)
+           dqn_curriculum vs Neural Ned on success: difference -0.08, p = 0.093. The jury is still out; more seeds needed before anyone gloats.
+
+Learning speed: greedy success averaged over training checkpoints (permutation test):
+  dqn_curriculum 0.722 vs dqn 0.851: difference -0.130  (p < 0.001)
+
+Other differences (permutation test):
+  [train] total_reward  dqn_curriculum - dqn: -0.358  (p = 0.015)
+  [unseen] total_reward  dqn_curriculum - dqn: -0.584  (p = 0.018)
+  [train] steps_to_goal dqn_curriculum - dqn: -0.220  (p = 0.096)
+  [unseen] steps_to_goal dqn_curriculum - dqn: -0.243  (p = 0.154)
+  [train] hazards       dqn_curriculum - dqn: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_curriculum - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_curriculum - dqn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_curriculum - dqn: +0.000  (p = 1.000)
+  [train] collisions    dqn_curriculum - dqn: +4.600  (p = 0.015)
+  [unseen] collisions    dqn_curriculum - dqn: +8.606  (p = 0.023)
+
+Replay buffer at the end of training (transitions; mean over seeds):
+  dqn             added    111585  main overwrote     91585
+  dqn_curriculum  added    116701  main overwrote     96701
+
+Files written to runs\experiments_curriculum\curriculum_generalization

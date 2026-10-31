@@ -79,3 +79,25 @@ From `buffer_diagnostics.csv`: runs added 126,000–136,000 transitions on avera
 ## Deviations from the protocol
 
 None. 30 runs, `--workers 4`, 87 minutes.
+
+## Post-hoc note (2026-10-30): one held-out maze was also a training maze
+
+Found while preparing the curriculum study, after these results were written: held-out
+layout 8224 generates exactly the same maze as training layout 8106, and training
+layouts 8133 and 8143 are the same maze (a 9×9 maze has only a 4×4 grid of rooms, so two
+seeds can produce the same maze). Training therefore used 49 distinct mazes (one drawn
+twice as often), and the held-out set was 49 unseen mazes plus one training maze. All
+arms trained and were tested on the same mazes, so the comparisons stay fair.
+Re-evaluating every run's final checkpoint (which reproduces the saved results exactly)
+without layout 8224:
+
+| | Variant | DQN | p (uncorrected) |
+|---|---|---|---|
+| Dueling, all 50 held-out layouts (as reported) | 0.394 | 0.364 | 0.508 |
+| Dueling, 49 genuinely unseen layouts | 0.384 | 0.359 | 0.594 |
+| 3-step, all 50 held-out layouts (as reported) | 0.396 | 0.364 | 0.465 |
+| 3-step, 49 genuinely unseen layouts | 0.386 | 0.359 | 0.550 |
+
+The duplicate maze was solved by 6/10 DQN runs and 9/10 runs of each variant. The
+conclusions for H3 and H4 (no evidence of a difference) are unchanged. Later studies
+check that no held-out maze duplicates a training maze.

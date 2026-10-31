@@ -83,3 +83,21 @@ most of what they saw.
 None. 20 runs, `--workers 4`, 63 minutes. The background job reported exit code 1 because
 of a `tail` command after the experiment had finished; the experiment completed normally
 (see `run.log`).
+
+## Post-hoc note (2026-10-30): one held-out maze was also a training maze
+
+Found while preparing the curriculum study, after these results were written: held-out
+layout 7223 generates exactly the same maze as training layout 7147 (a 9×9 maze has only
+a 4×4 grid of rooms, so two seeds can produce the same maze). The held-out set was
+therefore 49 unseen mazes plus one training maze. Both arms were tested on the same
+mazes, so the comparison stays fair. Re-evaluating every run's final checkpoint (which
+reproduces the saved results exactly) without layout 7223:
+
+| | Shaped DQN | DQN | p |
+|---|---|---|---|
+| All 50 held-out layouts (as reported) | 0.538 | 0.480 | 0.366 |
+| 49 genuinely unseen layouts | 0.529 | 0.469 | 0.366 |
+
+Both arms solved the duplicate maze in 10/10 runs. The conclusion (no evidence of a
+difference on unseen mazes) is unchanged. Later studies check that no held-out maze
+duplicates a training maze.

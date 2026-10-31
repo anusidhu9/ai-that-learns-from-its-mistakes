@@ -161,6 +161,8 @@ class Experiment:
     the buffer sizes in agent_kwargs. Labels not listed are agent names.
     arm_env_overrides: per-arm environment overrides added to env_overrides,
     e.g. {"dqn_shaped": {"rewards": {"shaping": 1.0}}}.
+    arm_curriculum: per-arm TrainConfig.curriculum, e.g.
+    {"dqn_curriculum": {"start": 10, "full_at": 1500}}.
     """
 
     name: str
@@ -177,6 +179,7 @@ class Experiment:
     description: str = ""
     agent_types: Dict[str, str] = field(default_factory=dict)
     arm_env_overrides: Dict[str, dict] = field(default_factory=dict)
+    arm_curriculum: Dict[str, dict] = field(default_factory=dict)
 
     def train_config(self, agent: str, seed: int) -> TrainConfig:
         kwargs = {} if agent == "random" else {"epsilon": {"decay_episodes": self.decay_episodes}}
@@ -184,7 +187,8 @@ class Experiment:
         overrides = {**self.env_overrides, **self.arm_env_overrides.get(agent, {})}
         return TrainConfig(env_preset=self.env_preset, env_overrides=overrides,
                            agent=self.agent_types.get(agent, agent), agent_kwargs=kwargs,
-                           episodes=self.episodes, seed=seed, checkpoint_every=self.eval_every)
+                           episodes=self.episodes, seed=seed, checkpoint_every=self.eval_every,
+                           curriculum=self.arm_curriculum.get(agent))
 
     def train_layouts(self) -> Optional[List[int]]:
         pool = self.env_overrides.get("layout_pool")
@@ -218,6 +222,13 @@ DV_SEEDS = tuple(range(300, 310))
 DV_LAYOUT = 8000
 DV_POOL = tuple(range(8100, 8150))
 DV_HELDOUT = tuple(range(8200, 8250))
+# Curriculum study (pre-registered in results/curriculum_generalization/PROTOCOL.md):
+# fresh seeds and layouts; schedule fixed in advance (never tuned).
+CU_SEEDS = tuple(range(400, 410))
+CU_POOL = tuple(range(9100, 9150))
+# 9225 generates the same maze as training layout 9139, so 9250 replaces it.
+CU_HELDOUT = tuple(s for s in range(9200, 9251) if s != 9225)
+CURRICULUM = {"start": 10, "full_at": 1500}
 
 EXPERIMENTS: Dict[str, Experiment] = {
     "fixed_maze": Experiment(
@@ -284,6 +295,16 @@ EXPERIMENTS: Dict[str, Experiment] = {
         episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=DV_HELDOUT,
         description="Train DQN, dueling DQN and 3-step DQN with a local 5x5 view on 50 fresh "
                     "mazes (8100-8149); test on 50 held-out mazes (8200-8249). Seeds 300-309."),
+    "curriculum_generalization": Experiment(
+        "curriculum_generalization", "maze",
+        env_overrides={"layout_pool": list(CU_POOL), "obs_mode": "local"},
+        agents=("dqn", "dqn_curriculum"), seeds=CU_SEEDS,
+        episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=CU_HELDOUT,
+        agent_types={"dqn_curriculum": "dqn"}, arm_curriculum={"dqn_curriculum": CURRICULUM},
+        description="Train DQN with a local 5x5 view on 50 fresh mazes (9100-9149), drawn "
+                    "uniformly or easiest-first (10 easiest mazes at first, all 50 from "
+                    "episode 1,500); test on 50 held-out mazes (9200-9250 except 9225). "
+                    "Seeds 400-409."),
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},
