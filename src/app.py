@@ -59,7 +59,7 @@ def code_version() -> str:
 
 AGENT_CHOICES = [(f"{AGENT_LABELS[a]} ({fun.NICKNAMES[a]})", a)
                  for a in ("tabular_q", "dqn", "dqn_dueling", "dqn_nstep", "dqn_dueling_nstep",
-                           "dqn_per", "dqn_mistake", "dqn_per_mistake", "random")]
+                           "dqn_cnn", "dqn_per", "dqn_mistake", "dqn_per_mistake", "random")]
 PRESET_CHOICES = list(PRESETS)
 METRIC_CHOICES = [("Success rate", "success"), ("Path efficiency", "path_efficiency"),
                   ("Mistakes per episode", "mistakes"), ("Steps", "steps"),
@@ -72,7 +72,7 @@ BRUSHES = [("⬛ Wall", "wall"), ("⬜ Empty", "empty"), ("🟥 Hazard", "hazard
            ("🔵 Start", "start"), ("🟩 Goal", "goal")]
 MAX_EPISODES = {"random": 1000, "tabular_q": 2000, "dqn": 800, "dqn_per": 800,
                 "dqn_mistake": 800, "dqn_per_mistake": 800, "dqn_dueling": 800,
-                "dqn_nstep": 800, "dqn_dueling_nstep": 800}
+                "dqn_nstep": 800, "dqn_dueling_nstep": 800, "dqn_cnn": 800}
 
 
 # ---------------------------------------------------------------------------
@@ -611,12 +611,18 @@ def load_checkpoint_ui(file, state):
     except Exception as exc:  # malformed or unsafe file: report, don't crash
         return f"Could not load that file: {type(exc).__name__}: {exc}", state
     trainer = Trainer(config)
-    trainer.load_checkpoint(path)
+    try:
+        trainer.load_checkpoint(path)
+        note = "Training can continue from here; the episode log starts empty."
+    except ValueError:  # a weights-only file (training.export_weights)
+        trainer.agent = agent
+        note = ("This file holds the trained network only, to watch or evaluate. Training "
+                "more would start with an empty replay buffer and a fresh optimizer.")
     state.update(trainer=trainer, frames=[], replay_env=None)
     where = " (your own maze)" if config.layout_text else ""
     return (f"Loaded **{AGENT_LABELS[config.agent]} ({fun.NICKNAMES[config.agent]})** on "
-            f"`{config.env_preset}`{where} after **{trainer.episodes_done}** episodes. Training can "
-            f"continue from here; the episode log starts empty."), state
+            f"`{config.env_preset}`{where} after **{trainer.episodes_done}** episodes. "
+            f"{note}"), state
 
 
 # ---------------------------------------------------------------------------
@@ -665,7 +671,7 @@ result is the task's. Whether it actually helps is tested in the `shaping_speed`
 |---|---|---|
 """ + "\n".join(f"| {AGENT_LABELS[a]} | {fun.NICKNAMES[a]} | {fun.TAGLINES[a]} |"
                 for a in ("random", "tabular_q", "dqn", "dqn_dueling", "dqn_nstep",
-                          "dqn_dueling_nstep", "dqn_per", "dqn_mistake", "dqn_per_mistake")) + """
+                          "dqn_dueling_nstep", "dqn_cnn", "dqn_per", "dqn_mistake", "dqn_per_mistake")) + """
 
 ## Achievements
 

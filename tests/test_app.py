@@ -72,6 +72,13 @@ def test_checkpoint_round_trip_through_the_ui(session, tmp_path):
     assert "Could not load" in app.load_checkpoint_ui(str(bad), app.new_session())[0]
 
 
+def test_load_saved_study_weights():
+    path = app.RESULTS_DIR / "cnn_generalization" / "models" / "dqn_cnn_s506.pt"
+    message, session = app.load_checkpoint_ui(str(path), app.new_session())
+    assert "network only" in message and session["trainer"].episodes_done == 3000
+    assert session["trainer"].agent.config.conv == (16, 32)
+
+
 def test_race_tab():
     last = None
     for last in app.race("open", 50, 1):
@@ -151,7 +158,7 @@ def test_train_with_reward_shaping():
     assert "shaping" in app.ABOUT
 
 
-@pytest.mark.parametrize("agent", ["dqn_dueling", "dqn_nstep", "dqn_dueling_nstep"])
+@pytest.mark.parametrize("agent", ["dqn_dueling", "dqn_nstep", "dqn_dueling_nstep", "dqn_cnn"])
 def test_train_tab_offers_dueling_and_n_step(agent):
     assert agent in [value for _, value in app.AGENT_CHOICES]
     state = app.new_session()

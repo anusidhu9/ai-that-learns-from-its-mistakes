@@ -40,12 +40,14 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **A hint toward the goal speeds up learning.** With potential-based reward shaping, tabular Q and DQN learned a fresh maze sooner (pre-registered, p = 0.002 each after correction). It did not measurably help DQN on new mazes (0.54 vs 0.48, p = 0.366). See [below](#reward-shaping).
 - **3-step returns made DQN learn a maze much faster; dueling heads didn't help.** On a fresh maze, 3-step DQN's learning speed was 0.86 against 0.37 (pre-registered, p = 0.0003 after correction, ahead in all 10 seeds). Neither change measurably helped on new mazes. See [below](#dueling-and-n-step-dqn).
 - **Training on easy mazes first made DQN learn more slowly.** With the same 50 mazes in easiest-first order, DQN learned them more slowly (0.72 vs 0.85, pre-registered, p = 0.0003 after correction, behind in all 10 seeds). On new mazes it was 0.49 vs 0.57, not a significant difference (p = 0.093). See [below](#training-curriculum).
+- **A convolutional network didn't help on new mazes.** With 3×3 convolutions over its 5×5 view, DQN solved 0.27 of new mazes against 0.33 for the standard network, and learned no faster (pre-registered, p = 0.55 for both after correction). See [below](#convolutional-q-network).
 - **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
 
 **What it does not (yet) support**
 - Whether prioritized replay helps or hurts: DQN + PER never differed significantly from plain DQN.
 - How common DQN's late collapse is: it happened in 1 of 10 hazard-maze runs, too few to estimate a rate.
 - That mistake memory *hurts*: it was behind plain DQN on held-out mazes in 9 of 10 seeds, but the difference was not significant (p = 0.082).
+- That a bigger network generalizes better: a plain network the size of the CNN solved 0.47 of new mazes against 0.33 (p = 0.019), but that arm was exploratory and the p-value is uncorrected. It needs a new pre-registered test.
 
 | Learning to avoid mistakes (fixed maze) | When fewer mistakes is not better (terminal hazards) |
 |---|---|
@@ -120,6 +122,23 @@ Does it help to start with the easy mazes? In [`curriculum_generalization`](resu
 The gap lasted long after the curriculum ended: at episode 2,500, with both arms on the same 50 mazes for 1,000 episodes, the curriculum arm was still 0.15 behind. With a fixed budget, extra practice on easy mazes came out of the hard ones (339 against 586 episodes on the 10 hardest), and the hard mazes arrived after most exploration was over.
 
 ![Greedy success during training, curriculum](docs/figures/curriculum_curves.png)
+
+### Convolutional Q-network
+
+Can a network built for images recognise maze patterns better? In [`cnn_generalization`](results/cnn_generalization/ANALYSIS.md) ([protocol](results/cnn_generalization/PROTOCOL.md), written before the run, fresh seeds 500–509), three versions of DQN train on the **same 50 mazes** for 3,000 episodes and differ only in their network: the standard MLP (128 × 128), **DQN (CNN)** (`dqn_cnn`: two 3×3 convolutions with 16 and 32 channels over the 5×5 view, then 128), and, as an exploratory check on size alone, a **wide MLP** (288 × 288) with about as many weights as the CNN.
+
+| Question | DQN (MLP) | DQN (CNN) | Verdict |
+|---|---|---|---|
+| Does it solve more **held-out** mazes? | 0.33 ± 0.08 | 0.27 ± 0.10 | No evidence (p = 0.55, behind in 7/10 seeds) |
+| Does it learn the training mazes faster? | 0.639 | 0.617 | No evidence (p = 0.55) |
+
+*p-values are Holm-corrected.*
+
+The CNN cost about 4× the compute of the MLP for no measurable gain. The surprise was the exploratory wide MLP: 0.47 on held-out mazes (p = 0.019 against the MLP, p = 0.004 against the CNN, both uncorrected). It is the first variant in Stages C–H to stand out on new mazes, but because it was exploratory it needs its own pre-registered test before it counts as a finding.
+
+All 30 trained networks are in [`results/cnn_generalization/models/`](results/cnn_generalization/models) (9.8 MB). Load one in the dashboard's **Checkpoints** tab, or with `load_agent`, to evaluate it or watch it play.
+
+![Success on training and held-out mazes, CNN study](docs/figures/cnn_success.png)
 
 ## Quick start
 
@@ -219,14 +238,14 @@ The commentator only reads the logs; it never changes a reward, an agent or a re
 ```
 src/
   envs.py           grid worlds, rewards, mistake events
-  agents.py         random, tabular Q-learning, DQN (+ Double, dueling, n-step), agent factory
+  agents.py         random, tabular Q-learning, DQN (+ Double, dueling, n-step, CNN), agent factory
   replay.py         uniform and prioritized replay buffers (sum tree)
   training.py       Trainer: logs, checkpoints, exact resumption, CLI
   evaluation.py     greedy evaluation, multi-seed experiments, statistics, CLI
   visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              243 tests (pytest); `-m "not slow"` skips one long training test
+tests/              266 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report
@@ -242,7 +261,7 @@ LICENSE             MIT License
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
 - 5–10 seeds per experiment: enough to show large differences, not small ones.
-- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3) and one curriculum schedule. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
+- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule and one CNN architecture. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 
 See [REPORT.md](REPORT.md) for the full discussion. To write up a new experiment, start from [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md); to publish your own copy, follow [docs/PUBLISHING.md](docs/PUBLISHING.md).

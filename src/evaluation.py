@@ -229,6 +229,12 @@ CU_POOL = tuple(range(9100, 9150))
 # 9225 generates the same maze as training layout 9139, so 9250 replaces it.
 CU_HELDOUT = tuple(s for s in range(9200, 9251) if s != 9225)
 CURRICULUM = {"start": 10, "full_at": 1500}
+# CNN study (pre-registered in results/cnn_generalization/PROTOCOL.md): fresh seeds
+# and layouts; network sizes fixed in advance (never tuned). dqn_wide is an MLP with
+# about as many weights as the CNN (106,852 vs 108,388), an exploratory capacity check.
+CN_SEEDS = tuple(range(500, 510))
+CN_POOL = tuple(range(9300, 9350))
+CN_HELDOUT = tuple(range(9400, 9450))
 
 EXPERIMENTS: Dict[str, Experiment] = {
     "fixed_maze": Experiment(
@@ -305,6 +311,16 @@ EXPERIMENTS: Dict[str, Experiment] = {
                     "uniformly or easiest-first (10 easiest mazes at first, all 50 from "
                     "episode 1,500); test on 50 held-out mazes (9200-9250 except 9225). "
                     "Seeds 400-409."),
+    "cnn_generalization": Experiment(
+        "cnn_generalization", "maze",
+        env_overrides={"layout_pool": list(CN_POOL), "obs_mode": "local"},
+        agents=("dqn", "dqn_cnn", "dqn_wide"), seeds=CN_SEEDS,
+        episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=CN_HELDOUT,
+        agent_types={"dqn_wide": "dqn"}, agent_kwargs={"dqn_wide": {"hidden": [288, 288]}},
+        description="Train DQN with a local 5x5 view on 50 fresh mazes (9300-9349) with an "
+                    "MLP (128x128), a CNN (two 3x3 convolutions, 16 and 32 channels, then "
+                    "128) or a wide MLP of the CNN's size (288x288); test on 50 held-out "
+                    "mazes (9400-9449). Seeds 500-509."),
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},

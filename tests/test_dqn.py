@@ -430,3 +430,92 @@ def test_old_checkpoints_without_dueling_or_discounts_still_load():
     restored.load_state_dict(state)
     assert not restored.config.dueling and restored.config.n_step == 1
     assert len(restored.buffer) == len(agent.buffer)
+
+
+# -- convolutional network -------------------------------------------------------------
+
+def test_conv_network_reads_the_window_as_an_image():
+    net = QNetwork(77, 4, hidden=(16,), conv=(4, 8))
+    assert net.encoder is not None and net.image_size == 75
+    assert net(torch.zeros(3, 77)).shape == (3, 4)
+    # The image part reaches the conv layers as (channel, row, col): a wall at row 1,
+    # col 3 of channel 0 is pixel (1, 3) of channel 0, and the last two values (the
+    # direction to the goal) skip the convolutions.
+    seen = {}
+    net.encoder.register_forward_hook(lambda m, inp, out: seen.update(image=inp[0]))
+    x = torch.zeros(1, 77)
+    x[0, 0 * 25 + 1 * 5 + 3] = 1.0
+    x[0, 75:] = torch.tensor([0.5, -0.5])
+    net(x)
+    expected = torch.zeros(1, 3, 5, 5)
+    expected[0, 0, 1, 3] = 1.0
+    torch.testing.assert_close(seen["image"], expected)
+    # the first hidden layer gets 8 maps x 25 cells plus the 2 direction values
+    assert net.net[0].in_features == 8 * 25 + 2
+    with pytest.raises(ValueError, match="smaller"):
+        QNetwork(40, 4, conv=(4,))
+
+
+def test_conv_filters_are_shared_across_the_window():
+    """The same pattern anywhere in the window gives the same feature, shifted."""
+    net = QNetwork(77, 4, hidden=(16,), conv=(4,))
+    a, b = torch.zeros(1, 3, 5, 5), torch.zeros(1, 3, 5, 5)
+    a[0, 0, 1, 1] = 1.0
+    b[0, 0, 2, 3] = 1.0
+    fa, fb = net.encoder(a), net.encoder(b)
+    torch.testing.assert_close(fa[0, :, 1, 1], fb[0, :, 2, 3])
+
+
+def test_make_agent_builds_the_cnn_agent():
+    env = make_env("maze", obs_mode="local")
+    agent = make_agent("dqn_cnn", env.obs_size, env.n_actions, seed=0)
+    assert agent.name == "dqn_cnn" and agent.nickname == "Neural Ned (Sees Patterns)"
+    assert agent.config.conv == (16, 32) and agent.config.hidden == (128,)
+    assert agent.q_values(env.reset(seed=0)[0]).shape == (4,)
+    assert sum(p.numel() for p in agent.online.parameters()) == 108_388
+    wide = make_agent("dqn", env.obs_size, env.n_actions, seed=0, hidden=(288, 288))
+    assert sum(p.numel() for p in wide.online.parameters()) == 106_852
+    # plain DQN is untouched by the option: same weights as a network built without it
+    plain = make_agent("dqn", env.obs_size, env.n_actions, seed=3)
+    torch.manual_seed(3)
+    old_style = QNetwork(env.obs_size, env.n_actions)
+    assert plain.online.encoder is None
+    for p, q in zip(plain.online.parameters(), old_style.parameters()):
+        torch.testing.assert_close(p, q)
+
+
+def test_cnn_checkpoint_round_trip_and_mismatch():
+    env = make_env("maze", obs_mode="local")
+    agent = make_agent("dqn_cnn", env.obs_size, env.n_actions, seed=0, learning_starts=20)
+    train_agent(env, agent, 2, seed=0)
+    blob = pickle.dumps(agent.state_dict(include_buffer=True))
+    restored = make_agent("dqn_cnn", env.obs_size, env.n_actions, seed=1)
+    restored.load_state_dict(pickle.loads(blob))
+    obs, _ = env.reset(seed=5)
+    np.testing.assert_allclose(restored.q_values(obs), agent.q_values(obs))
+    with pytest.raises(ValueError):
+        make_agent("dqn", env.obs_size, env.n_actions, hidden=(128,)).load_state_dict(
+            pickle.loads(blob))
+
+
+def test_old_checkpoints_without_conv_still_load():
+    env = make_env("maze")
+    agent = make_agent("dqn", env.obs_size, env.n_actions, seed=0, hidden=(16,))
+    state = agent.state_dict()
+    for key in ("conv", "conv_input"):
+        del state["config"][key]
+    restored = make_agent("dqn", env.obs_size, env.n_actions, hidden=(16,))
+    restored.load_state_dict(state)
+    assert restored.config.conv == ()
+
+
+def test_cnn_agent_solves_corridor():
+    solved = 0
+    for seed in range(3):
+        env = GridWorld.from_ascii(CORRIDOR, EnvConfig(max_steps=30, obs_mode="local"))
+        agent = make_agent("dqn_cnn", env.obs_size, env.n_actions, seed=seed, hidden=(64,),
+                           learning_starts=64, epsilon=EpsilonSchedule(decay_episodes=40))
+        train_agent(env, agent, 100, seed=seed)
+        result = run_episode(env, agent, train=False, greedy=True)
+        solved += result["success"] and result["steps"] == 4
+    assert solved >= 2

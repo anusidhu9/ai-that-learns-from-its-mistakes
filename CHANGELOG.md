@@ -2,6 +2,23 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Convolutional Q-network (Stage E)
+
+**Added**
+- DQN option `conv` (channel counts of 3×3 convolutions, padding 1, ReLU) and `conv_input` (the image's channels, rows and columns). The image is the first C·H·W values of the observation; anything after it (the goal direction in local view) is concatenated with the flattened maps before the hidden layers. Off by default (`conv=()`); then networks are built exactly as before (same initial weights, tested), and 500 episodes of `dqn_variants_generalization` DQN seed 300 reproduce the saved log exactly.
+- `GridWorld.image_shape`; CNN agents read the image shape from the environment (4×H×W for the full map, 3×5×5 for the local view).
+- Agent `dqn_cnn` (two convolutions with 16 and 32 channels, then one hidden layer of 128) with a nickname, in the dashboard's Train tab and About page, and chart styles for `dqn_cnn` and `dqn_wide`.
+- Experiment `cnn_generalization`, pre-registered in `results/cnn_generalization/PROTOCOL.md` with fresh seeds (500–509) and layouts (9300–9349 training, 9400–9449 held-out), plus an exploratory capacity-matched arm `dqn_wide` (MLP 288 × 288). Results, analysis, two figures, notebook cells, README and REPORT section 6.11.
+- `training.export_weights`: a small evaluation-only copy of a checkpoint (config and trained network, without the replay buffer, target network, optimizer or generator states). `load_agent` and the dashboard read it; `Trainer.load_checkpoint` refuses it with a clear message. All 30 networks of the study are in `results/cnn_generalization/models/` (9.8 MB), each checked to reproduce its run's saved results exactly.
+- 12 tests (266 in total): the image layout and shared filters, building and checkpointing the CNN agent (including old checkpoints and mismatches), the environment's image shape, the CNN solving a corridor, the protocol settings and fresh held-out mazes, exported weights for an MLP and a CNN, and loading a saved study network in the dashboard. The dashboard test now covers the CNN agent too.
+
+**Fixed**
+- The notebook's curriculum cell had the same cell id as the DQN-variants cell; it now has its own.
+
+**Results**
+- `cnn_generalization`: no evidence that the CNN helps. Held-out success 0.27 vs 0.33 for the standard MLP, learning speed 0.617 vs 0.639 (Holm-corrected p = 0.55 for both). Exploratory: the wide MLP reached 0.47 on held-out mazes (p = 0.019 vs the MLP, uncorrected), which needs a pre-registered test of its own. The CNN cost about 3–4× the compute.
+- The first attempt (`--workers 3`) was stopped for lack of memory after 6 runs and resumed with `--workers 2` in a separate window; resumption does not change results. `run.log` was regenerated afterwards by rerunning the finished experiment (all CSVs byte-identical).
+
 ## Training curriculum (Stage H)
 
 **Added**

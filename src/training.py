@@ -186,8 +186,12 @@ def build_agent(config: TrainConfig, env: GridWorld):
     kwargs = dict(config.agent_kwargs)
     if isinstance(kwargs.get("epsilon"), dict):
         kwargs["epsilon"] = EpsilonSchedule(**kwargs["epsilon"])
-    if isinstance(kwargs.get("hidden"), list):
-        kwargs["hidden"] = tuple(kwargs["hidden"])
+    for key in ("hidden", "conv", "conv_input"):
+        if isinstance(kwargs.get(key), list):
+            kwargs[key] = tuple(kwargs[key])
+    if "_cnn" in config.agent or kwargs.get("conv"):
+        # the convolutions must see this environment's image (full map or local window)
+        kwargs.setdefault("conv_input", env.image_shape)
     if isinstance(kwargs.get("mistake_events"), list):
         kwargs["mistake_events"] = tuple(kwargs["mistake_events"])
     return make_agent(config.agent, env.obs_size, env.n_actions, seed=config.seed, **kwargs)
@@ -345,6 +349,9 @@ class Trainer:
         if state["config"]["agent"] != self.config.agent:
             raise ValueError(f"checkpoint is for agent {state['config']['agent']!r}, "
                              f"not {self.config.agent!r}")
+        if "rng" not in state:
+            raise ValueError("this is a weights-only file: load it with load_agent to "
+                             "evaluate it; it cannot resume training")
         self.agent.load_state_dict(state["agent"])
         rng = state["rng"]
         self.env.rng.bit_generator.state = rng["env"]
@@ -419,6 +426,22 @@ def load_agent(path: PathLike):
     agent = build_agent(config, env)
     agent.load_state_dict(state["agent"])
     return agent, env, config
+
+
+def export_weights(checkpoint: PathLike, out: PathLike) -> Path:
+    """Write a small evaluation-only copy of a checkpoint: the run's config and
+    the trained network, without the replay buffer, target network, optimizer
+    state or random-generator states. load_agent reads it like a checkpoint
+    (the target network starts as a copy); Trainer.load_checkpoint refuses it."""
+    state = _read_checkpoint(checkpoint)
+    agent = dict(state["agent"])
+    for key in ("buffer", "target", "optimizer"):
+        agent.pop(key, None)
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"format": state["format"], "config": state["config"], "agent": agent,
+                "episodes_done": state["episodes_done"]}, out)
+    return out
 
 
 # ---------------------------------------------------------------------------

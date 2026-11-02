@@ -5,11 +5,13 @@ import shutil
 
 import numpy as np
 import pytest
+import torch
 
 from src.agents import DQNAgent, EpsilonSchedule, RandomAgent, TabularQAgent
 from src.envs import EnvConfig, GridWorld, RewardConfig
 from src.training import (CHECKPOINT_FILE, EPISODES_FILE, LOG_FIELDS, MISTAKES_FILE,
                           TrainConfig, Trainer, build_agent, build_env, compare_phases,
+                          export_weights,
                           format_phase_table, load_agent, load_history, load_mistakes,
                           curriculum_size, mistake_hotspots, reward_breakdown, run_episode)
 
@@ -209,6 +211,23 @@ def test_load_agent_restores_policy(tmp_path, cfg):
     np.testing.assert_allclose(agent.q_values(obs), trainer.agent.q_values(obs))
 
 
+@pytest.mark.parametrize("kwargs", [{}, {"conv": [4], "hidden": [16]}], ids=["mlp", "cnn"])
+def test_exported_weights_load_for_evaluation_only(tmp_path, kwargs):
+    cfg = {**DQN, "agent_kwargs": {**DQN["agent_kwargs"], **kwargs}}
+    trainer = Trainer(TrainConfig(**cfg), tmp_path / "run")
+    trainer.train(episodes=6)
+    out = export_weights(tmp_path / "run" / CHECKPOINT_FILE, tmp_path / "w" / "model.pt")
+    assert out.stat().st_size < (tmp_path / "run" / CHECKPOINT_FILE).stat().st_size / 4
+    agent, env, config = load_agent(out)
+    assert config == trainer.config and agent.episodes == 6
+    obs, _ = env.reset()
+    np.testing.assert_allclose(agent.q_values(obs), trainer.agent.q_values(obs))
+    for p, q in zip(agent.target.parameters(), agent.online.parameters()):
+        assert torch.equal(p, q)
+    with pytest.raises(ValueError, match="weights-only"):
+        Trainer(TrainConfig(**cfg)).load_checkpoint(out)
+
+
 def test_load_checkpoint_rejects_other_agent(tmp_path):
     Trainer(TrainConfig(**TABULAR), tmp_path / "a").train(episodes=2)
     other = Trainer(TrainConfig(**{**TABULAR, "agent": "random", "agent_kwargs": {}}))
@@ -406,3 +425,17 @@ def test_run_dirs_saved_before_curriculum_existed_still_resume(tmp_path):
     (run / "config.json").write_text(json.dumps(old, indent=2))
     resumed = Trainer.resume(run)
     assert resumed.episodes_done == 5 and resumed.config.curriculum is None
+
+
+def test_cnn_agent_gets_the_environment_image_shape():
+    for overrides, shape in (({}, (4, 9, 9)), ({"obs_mode": "local"}, (3, 5, 5)),
+                             ({"obs_mode": "local", "view_radius": 3}, (3, 7, 7))):
+        cfg = TrainConfig(agent="dqn_cnn", env_overrides=overrides)
+        env = build_env(cfg)
+        agent = build_agent(cfg, env)
+        assert env.image_shape == shape and agent.config.conv_input == shape
+        assert agent.online.image_size == env.obs_size - (0 if not overrides else 2)
+        assert agent.q_values(env.reset(seed=0)[0]).shape == (4,)
+    custom = TrainConfig(agent="dqn_cnn", layout_text="#######\n#S...G#\n#######")
+    env = build_env(custom)
+    assert build_agent(custom, env).config.conv_input == (4, 3, 7)

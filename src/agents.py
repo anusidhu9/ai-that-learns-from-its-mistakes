@@ -219,6 +219,8 @@ class DQNConfig:
     mistake_events: Tuple[str, ...] = MISTAKE_REPLAY_EVENTS
     dueling: bool = False           # value + advantage heads (Wang et al., 2016)
     n_step: int = 1                 # learn from n rewards before bootstrapping
+    conv: Tuple[int, ...] = ()      # 3x3 conv channels before the hidden layers (empty: MLP)
+    conv_input: Tuple[int, int, int] = (3, 5, 5)  # (channels, rows, cols) of the image part
 
 
 class QNetwork(nn.Module):
@@ -231,12 +233,36 @@ class QNetwork(nn.Module):
 
     (subtracting the mean makes V and A identifiable). The plain network is
     built exactly as before, so its initial weights don't change.
+
+    conv=(c1, c2, ...) puts 3x3 convolutions (padding 1, so the size is kept)
+    in front of the hidden layers. The first conv_input = (C, H, W) values of
+    the observation are read as a C x H x W image (the local view's wall,
+    hazard and goal channels); the rest (the direction to the goal) skip the
+    convolutions and join the flattened feature maps. The same filters are
+    applied at every position, so a corridor or dead end is recognised
+    wherever it appears in the window.
     """
 
     def __init__(self, obs_size: int, n_actions: int, hidden: Tuple[int, ...] = (128, 128),
-                 dueling: bool = False):
+                 dueling: bool = False, conv: Tuple[int, ...] = (),
+                 conv_input: Tuple[int, int, int] = (3, 5, 5)):
         super().__init__()
-        layers, size = [], obs_size
+        size = obs_size
+        self.encoder: Optional[nn.Sequential] = None
+        if conv:
+            channels, rows, cols = conv_input
+            self.image_size = channels * rows * cols
+            if obs_size < self.image_size:
+                raise ValueError(f"observation of size {obs_size} is smaller than the "
+                                 f"conv_input image {tuple(conv_input)}")
+            self.conv_input = tuple(conv_input)
+            convs = []
+            for width in conv:
+                convs += [nn.Conv2d(channels, width, kernel_size=3, padding=1), nn.ReLU()]
+                channels = width
+            self.encoder = nn.Sequential(*convs)
+            size = channels * rows * cols + obs_size - self.image_size
+        layers = []
         for width in hidden:
             layers += [nn.Linear(size, width), nn.ReLU()]
             size = width
@@ -250,6 +276,9 @@ class QNetwork(nn.Module):
             self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.encoder is not None:
+            image = x[:, :self.image_size].reshape(-1, *self.conv_input)
+            x = torch.cat([self.encoder(image).flatten(1), x[:, self.image_size:]], dim=1)
         if not self.dueling:
             return self.net(x)
         h = self.net(x)
@@ -262,14 +291,19 @@ DQN_NICKNAMES = {"dqn": "Neural Ned", "dqn_per": "Neural Ned (Holds Grudges)",
                  "dqn_per_mistake": "Neural Ned (Holds Grudges, Keeps a Diary)",
                  "dqn_dueling": "Neural Ned (Two-Headed)",
                  "dqn_nstep": "Neural Ned (Looks Ahead)",
-                 "dqn_dueling_nstep": "Neural Ned (Two-Headed, Looks Ahead)"}
+                 "dqn_dueling_nstep": "Neural Ned (Two-Headed, Looks Ahead)",
+                 "dqn_cnn": "Neural Ned (Sees Patterns)"}
 N_STEP_DEFAULT = 3  # n for the named n-step agents (as in Rainbow, Hessel et al., 2018)
+# Network of the named CNN agent: two 3x3 convolutions (16 and 32 channels) over
+# the 5x5 local view, then one hidden layer of 128.
+CNN_DEFAULT = dict(conv=(16, 32), hidden=(128,))
 
 
 def dqn_name(config: DQNConfig) -> str:
-    """'dqn' plus '_per', '_dueling', '_nstep' and '_mistake' for each option on,
-    e.g. 'dqn_per_mistake' or 'dqn_dueling_nstep'."""
+    """'dqn' plus '_per', '_cnn', '_dueling', '_nstep' and '_mistake' for each
+    option on, e.g. 'dqn_per_mistake' or 'dqn_dueling_nstep'."""
     return ("dqn_per" if config.prioritized else "dqn") + \
+        ("_cnn" if config.conv else "") + \
         ("_dueling" if config.dueling else "") + \
         ("_nstep" if config.n_step > 1 else "") + \
         ("_mistake" if config.mistake_replay else "")
@@ -306,6 +340,8 @@ class DQNAgent:
     (exploration included) and are not corrected for it, as in Rainbow.
     dueling switches the network to value + advantage heads. Both are off by
     default (n_step = 1, dueling = False) and then the agent is unchanged.
+    conv adds convolutional layers in front of the network (see QNetwork); off
+    by default (conv = ()).
     """
 
     def __init__(self, obs_size: int, n_actions: int, config: Optional[DQNConfig] = None,
@@ -325,8 +361,10 @@ class DQNAgent:
         if cfg.n_step > 1 and cfg.mistake_replay:
             raise ValueError("n-step returns can't be combined with mistake replay: "
                              "it is undefined which of the n steps makes the mistake")
-        self.online = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling)
-        self.target = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling)
+        self.online = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling, cfg.conv,
+                               cfg.conv_input)
+        self.target = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling, cfg.conv,
+                               cfg.conv_input)
         self.target.load_state_dict(self.online.state_dict())
         self.target.eval()
         self.optimizer = torch.optim.Adam(self.online.parameters(), lr=cfg.lr)
@@ -462,7 +500,11 @@ class DQNAgent:
         cfg["epsilon"] = EpsilonSchedule(**cfg["epsilon"])
         if "mistake_events" in cfg:
             cfg["mistake_events"] = tuple(cfg["mistake_events"])
+        cfg["conv"] = tuple(cfg.get("conv", ()))
+        cfg["conv_input"] = tuple(cfg.get("conv_input", DQNConfig.conv_input))
         if (cfg["hidden"] != tuple(self.config.hidden)
+                or cfg["conv"] != tuple(self.config.conv)
+                or (cfg["conv"] and cfg["conv_input"] != tuple(self.config.conv_input))
                 or cfg["prioritized"] != self.config.prioritized
                 or cfg.get("mistake_replay", False) != self.config.mistake_replay
                 or cfg.get("dueling", False) != self.config.dueling
@@ -471,8 +513,11 @@ class DQNAgent:
                              "from this agent")
         self.config = DQNConfig(**cfg)
         self.online.load_state_dict(state["online"])
-        self.target.load_state_dict(state["target"])
-        self.optimizer.load_state_dict(state["optimizer"])
+        # Weights-only files (training.export_weights) have no target network or
+        # optimizer state: the target starts as a copy, the optimizer fresh.
+        self.target.load_state_dict(state.get("target", state["online"]))
+        if "optimizer" in state:
+            self.optimizer.load_state_dict(state["optimizer"])
         self.episodes = int(state["episodes"])
         self.env_steps = int(state["env_steps"])
         self.updates = int(state["updates"])
@@ -485,7 +530,8 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
 
     DQN variants: 'dqn', 'dqn_per' (prioritized replay), 'dqn_mistake'
     (mistake-aware replay), 'dqn_per_mistake' (both), 'dqn_dueling' (dueling
-    heads), 'dqn_nstep' (3-step returns) and 'dqn_dueling_nstep'. kwargs go to
+    heads), 'dqn_nstep' (3-step returns), 'dqn_dueling_nstep' and 'dqn_cnn'
+    (convolutional network, see CNN_DEFAULT). kwargs go to
     TabularQAgent, or become DQNConfig fields for the DQN variants.
     """
     if name == "random":
@@ -498,6 +544,9 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
         kwargs["dueling"] = "_dueling" in name
         if "_nstep" in name:
             kwargs.setdefault("n_step", N_STEP_DEFAULT)
+        if "_cnn" in name:
+            for key, value in CNN_DEFAULT.items():
+                kwargs.setdefault(key, value)
         return DQNAgent(obs_size, n_actions, DQNConfig(**kwargs), seed=seed)
     raise ValueError(f"unknown agent {name!r}; choose random, tabular_q or one of "
                      f"{', '.join(DQN_NICKNAMES)}")

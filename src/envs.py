@@ -381,6 +381,16 @@ class GridWorld:
         side = 2 * cfg.view_radius + 1
         return 3 * side * side + 2
 
+    @property
+    def image_shape(self) -> Tuple[int, int, int]:
+        """(channels, rows, cols) of the image at the start of each observation
+        (the whole observation in grid mode; before the goal direction in local)."""
+        cfg = self.config
+        if cfg.obs_mode == "grid":
+            return (4, cfg.height, cfg.width)
+        side = 2 * cfg.view_radius + 1
+        return (3, side, side)
+
     # -- core API ------------------------------------------------------------
 
     def reset(self, seed: Optional[int] = None,

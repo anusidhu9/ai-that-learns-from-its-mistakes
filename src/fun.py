@@ -34,6 +34,7 @@ TAGLINES: Dict[str, str] = {
     "dqn_dueling": "Asks \"is this a good place to be?\" before \"which way now?\"",
     "dqn_nstep": "Counts the next three rewards before trusting its own guess.",
     "dqn_dueling_nstep": "Two heads, three steps of patience.",
+    "dqn_cnn": "Knows a dead end when it sees one, wherever it sees it.",
 }
 
 _EVENT_LINES: Dict[str, Sequence[str]] = {

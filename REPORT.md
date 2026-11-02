@@ -2,7 +2,7 @@
 
 ## 1. Summary
 
-This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, DQN with an explicit memory of its mistakes was tested in two more, potential-based reward shaping in two pre-registered experiments, dueling heads and 3-step returns for DQN in two more, and an easiest-first training curriculum in one more, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
+This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, DQN with an explicit memory of its mistakes was tested in two more, potential-based reward shaping in two pre-registered experiments, dueling heads and 3-step returns for DQN in two more, an easiest-first training curriculum in one more, and a convolutional Q-network in one more, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
 
 Main findings:
 
@@ -15,6 +15,7 @@ Main findings:
 7. **A hint toward the goal speeds up learning, but did not measurably improve generalization.** Potential-based reward shaping (strength fixed at 1.0 in advance) made both agents learn a fresh maze sooner (pre-registered, Holm-corrected: tabular Q p = 0.002, DQN p = 0.002). Shaped DQN solved the maze in all 10 seeds, plain DQN in 6. On 50 held-out mazes, shaped DQN reached the goal in 54% against 48% (p = 0.366): no evidence of a difference (Section 6.8).
 8. **3-step returns made DQN learn a maze much faster; dueling heads made no measurable difference; neither improved generalization.** On a fresh maze, 3-step DQN's learning speed was 0.863 against 0.369 (pre-registered, Holm-corrected p = 0.0003, ahead in all 10 seeds); dueling DQN's was 0.338 (p = 0.82). On 50 held-out mazes both variants were +0.03 ahead of plain DQN, far from significant (Holm-corrected p = 0.93; Section 6.9).
 9. **Training on easy mazes first made DQN learn more slowly.** With the same 50 training mazes in easiest-first order, DQN's learning speed was 0.722 against 0.851 for uniform order (pre-registered, Holm-corrected p = 0.0003, behind in all 10 seeds). On 50 held-out mazes it reached the goal in 49% against 57% (behind in 8 of 10 seeds, p = 0.093): no evidence of a difference (Section 6.10).
+10. **A convolutional network did not help DQN on new mazes.** With two 3×3 convolutions over the 5×5 view, DQN reached the goal on 27% of 50 held-out mazes against 33% with the standard network, and learned its training mazes no faster (0.617 vs 0.639; pre-registered, Holm-corrected p = 0.55 for both): no evidence of a difference. In an exploratory comparison, a plain network of the same size as the CNN did best (47% held-out, p = 0.019 against the standard network, uncorrected); that needs confirming before it can be claimed (Section 6.11).
 
 ## 2. Question and approach
 
@@ -95,6 +96,8 @@ DQN's `train_freq` and `target_update` were tuned on the fixed maze during devel
 **Dueling DQN** (`dqn_dueling`; Wang et al., 2016). The last layer is replaced by two heads on the same hidden layers: a state value V(s) and per-action advantages A(s, a), combined as `Q(s, a) = V(s) + A(s, a) − mean_a′ A(s, a′)`.
 
 **n-step DQN** (`dqn_nstep`, n = 3; as in Rainbow, Hessel et al., 2018). Each stored transition carries `R = r_t + γ r_{t+1} + γ² r_{t+2}` and bootstraps from the state three steps later with γ³. The last one or two transitions of an episode span fewer steps and are stored with γ¹ or γ²; after a timeout they still bootstrap. The rewards include exploratory moves and are not corrected for them. `dqn_dueling_nstep` combines both. Both options are off by default, and with them off DQN and DQN + PER reproduce earlier results exactly (checked by rerunning `hazard_maze`, seeds 0–1). n-step returns are not combined with mistake memory.
+
+**Convolutional DQN** (`dqn_cnn`). The observation's image part (here the 5×5 local view, as wall, hazard and goal channels) passes through two 3×3 convolutions (16 and 32 channels, padding 1, ReLU), so the same small filters are applied at every position. The flattened maps (800 values) and the two goal-direction values feed one hidden layer of 128: 108,388 weights against 27,012 for the standard MLP. The image shape is read from the environment. With convolutions off (the default) networks are built exactly as before (same initial weights, tested). For the experiment in Section 6.11, `dqn_wide` is a plain DQN with two hidden layers of 288 (106,852 weights), about the CNN's size.
 
 ## 5. Evaluation protocol
 
@@ -331,6 +334,31 @@ Same maze, seeds 0–9, budget and evaluation as `hazard_maze`, comparing DQN an
 
 **A check on earlier held-out sets.** Because a 9×9 maze has only a 4×4 grid of rooms, two layout seeds can generate the same maze. Checking every experiment found one held-out maze that was also a training maze in `shaping_generalization` (7223 = 7147) and in `dqn_variants_generalization` (8224 = 8106; there two training layouts also coincide, 8133 = 8143). Both arms of each study were tested on the same mazes, so the comparisons stay fair. Re-evaluated without the duplicate, held-out success moved by at most 0.01 and every conclusion is unchanged (p = 0.37, 0.59 and 0.55 instead of 0.37, 0.51 and 0.47; notes in the two `ANALYSIS.md` files). `long_memory_mistakes` and `generalization` had no such duplicate.
 
+### 6.11 Convolutional Q-network (`cnn_generalization`, 10 seeds, pre-registered)
+
+**Question.** Shaping, 3-step returns and a curriculum changed how DQN learns or what it practises, and none helped on new mazes. This study changes what the network can represent: a convolutional network applies the same 3×3 filters at every position of the 5×5 view, so a corridor or a dead end could be recognised wherever it appears. Does it solve more held-out mazes, and learn its training mazes sooner? The protocol ([`PROTOCOL.md`](results/cnn_generalization/PROTOCOL.md)) was written before any run. Full analysis: [`ANALYSIS.md`](results/cnn_generalization/ANALYSIS.md).
+
+**Design.**
+- **Only the network differs.** Three arms train DQN with the same settings on the same 50 fresh mazes (9300–9349) for 3,000 episodes: the standard MLP (128 × 128, 27,012 weights), the CNN (`dqn_cnn`, Section 4, 108,388 weights) and, as an exploratory check on size alone, a wide MLP (288 × 288, 106,852 weights). Network sizes were fixed in advance and not tuned.
+- **Held-out mazes.** 50 fresh layouts (9400–9449), none identical to a training maze (checked by a test).
+- **Seeds.** Fresh seeds 500–509.
+- **Primary endpoints**, CNN vs MLP, Holm-corrected together. H1: held-out success. H2: learning speed (greedy success on the 50 training mazes averaged over evaluations every 500 episodes). The wide MLP is exploratory and not part of the corrected tests.
+
+| Hypothesis | DQN (MLP) | DQN (CNN) | Seeds ahead / tied / behind | p (Holm) | Verdict |
+|---|---|---|---|---|---|
+| H1: held-out success | 0.33 ± 0.08 | 0.27 ± 0.10 | 3 / 0 / 7 | 0.55 | No evidence of a difference |
+| H2: learning speed | 0.639 | 0.617 | 5 / 0 / 5 | 0.55 | No evidence of a difference |
+
+![Greedy success on training and held-out mazes, CNN study](docs/figures/cnn_success.png)
+
+- **The CNN never pulled ahead.** Its learning curve overlapped the MLP's at every evaluation (differences −0.08 to +0.04, p ≥ 0.10), and no other metric differed significantly on either split.
+- **Exploratory: the wide MLP did best.** On held-out mazes it reached 0.47, against 0.33 for the MLP (p = 0.019, ahead in 7 of 10 seeds) and 0.27 for the CNN (p = 0.004, ahead in 9 of 10), with more direct paths (path efficiency 0.45 vs 0.32, p = 0.019). On the training mazes it finished at 0.82 against 0.67 (p = 0.011), although its learning speed was not significantly different (0.675, p = 0.26): it pulled ahead only in the last 1,000 episodes. These p-values are uncorrected, from an arm the protocol labelled exploratory.
+- **Cost.** A CNN run took about 32 minutes against 7–10 for either MLP, about 3–4× the compute for no measurable gain.
+
+![Greedy success during training, CNN study](docs/figures/cnn_curves.png)
+
+**Trained networks.** Every run's final network is saved in [`results/cnn_generalization/models/`](results/cnn_generalization/models) (30 files, 9.8 MB): the run's config and trained network only, without the replay buffer or optimizer state. Each file reproduces its run's saved results exactly. They load with `load_agent` or the dashboard's Checkpoints tab, for evaluation only.
+
 ## 7. Discussion
 
 **Did the agents learn from their mistakes?** Yes, on every fixed layout, and the logs show how. Mistakes concentrated in specific places early in training (the corridor below the start), the corresponding penalties dominated the reward, and both disappeared as Q-values for the offending actions fell. The early-versus-late comparison, the mistake hotspots and the reward breakdown all point the same way, and greedy evaluation confirms it with exploration off.
@@ -354,6 +382,8 @@ Same maze, seeds 0–9, budget and evaluation as `hazard_maze`, comparing DQN an
 
 **Curriculum.** Ordering the same training mazes from easy to hard (Section 6.10) did not help and slowed learning. With a fixed episode budget, a curriculum is a trade: extra practice on easy mazes is taken from hard ones, and the hard ones arrive after most exploration is over. Here "easy" was also not very different from "hard": 29 of the 50 mazes shared the minimum path length, and through a 5×5 window a short maze can look locally like a long one. This result is about one schedule on one kind of maze. A curriculum over something that changes difficulty more, such as maze size, or one that advances when the agent succeeds rather than on a timetable, could behave differently. Together with Stages C and D, it adds to the evidence that how the agent is trained matters less for new mazes than what it can see and represent.
 
+**Convolutions.** The CNN tested that idea directly (Section 6.11) and did not help: it was no better on new mazes or at learning its training mazes, and cost 3–4× the compute. The study cannot say why. On a 5×5 window a 3×3 filter is near the edge at almost every position, which leaves little for weight sharing to exploit, and by design the CNN had one hidden layer after its convolutions where the MLPs had two; neither explanation was tested. The exploratory wide MLP, with the CNN's number of weights but no convolutions, did best of the three. If that holds up in a pre-registered replication, it would be the first change in this project to improve success on new mazes, and it would point to the network's capacity rather than its structure. Until then it is a lead, not a result.
+
 ## 8. Problems found and fixed during development
 
 These are reported because each would have changed the conclusions.
@@ -370,12 +400,12 @@ These are reported because each would have changed the conclusions.
 
 - **Small tasks.** 8×8 and 9×9 grids with 100-step episodes, chosen to fit a free CPU. The ranking of algorithms may change on larger problems.
 - **Few seeds.** Five per agent for three of the five experiments can show large effects only. Extending `hazard_maze` and `generalization` to 10 seeds turned two "not established" differences into established ones; the remaining open questions (PER, how often DQN collapses) might be settled the same way.
-- **Limited tuning.** One hyperparameter setting per algorithm, one shaping strength (1.0), one n for multi-step returns (3) and one curriculum schedule. DQN's update frequency and target-update interval were chosen from four settings on the fixed maze; tabular Q-learning was not tuned at all. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); a smaller share, or a task where mistakes are rare, might behave differently, but tuning it on the seeds already examined would mean tuning on the test set.
+- **Limited tuning.** One hyperparameter setting per algorithm, one shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule and one CNN architecture (not tuned; it used the MLP's learning rate). DQN's update frequency and target-update interval were chosen from four settings on the fixed maze; tabular Q-learning was not tuned at all. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); a smaller share, or a task where mistakes are rare, might behave differently, but tuning it on the seeds already examined would mean tuning on the test set.
 - **Fixed training budgets.** Tabular Q-learning was still improving at the end of the generalization runs.
 - **Non-Markovian revisit penalty**, as described in Section 3.
 - **Statistics.** t-intervals on 5–10 bounded values are approximate; the charts clip them to the possible range.
 - **Duplicate mazes.** Small mazes can repeat across layout seeds. Two held-out sets each contained one training maze (Section 6.10); this did not change any conclusion, and later experiments are checked for it.
-- **Held-out success varies between studies.** Plain DQN reached 0.48, 0.36 and 0.57 on the held-out sets of Sections 6.8–6.10, with similar shares of short mazes. Only comparisons within one study are meaningful.
+- **Held-out success varies between studies.** Plain DQN reached 0.48, 0.36, 0.57 and 0.33 on the held-out sets of Sections 6.8–6.11, with similar shares of short mazes. Only comparisons within one study are meaningful.
 
 ## 10. Reproducibility
 
@@ -393,11 +423,12 @@ python -m src.evaluation --experiment shaping_generalization --workers 4
 python -m src.evaluation --experiment dqn_variants_speed --workers 4
 python -m src.evaluation --experiment dqn_variants_generalization --workers 4
 python -m src.evaluation --experiment curriculum_generalization --workers 4
+python -m src.evaluation --experiment cnn_generalization --workers 2
 python -m src.visualization                             # regenerates docs/figures from results/
-python -m pytest -q                                     # 254 tests
+python -m pytest -q                                     # 266 tests
 ```
 
-The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. The two mistake-replay experiments add `buffer_diagnostics.csv` (how much each replay buffer forgot) and `ANALYSIS.md`; `long_memory_mistakes` also has `PROTOCOL.md` and its pilot in `pilot/`. The two shaping experiments have `ANALYSIS.md`, and their shared `PROTOCOL.md` is in `results/shaping_speed/`; likewise the two DQN-variant experiments, with the protocol in `results/dqn_variants_speed/`. `curriculum_generalization` has its own `PROTOCOL.md` and `ANALYSIS.md`. `--workers N` trains N runs at a time; runs are independent and seeded, so results are the same as with one worker (tested). Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
+The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. The two mistake-replay experiments add `buffer_diagnostics.csv` (how much each replay buffer forgot) and `ANALYSIS.md`; `long_memory_mistakes` also has `PROTOCOL.md` and its pilot in `pilot/`. The two shaping experiments have `ANALYSIS.md`, and their shared `PROTOCOL.md` is in `results/shaping_speed/`; likewise the two DQN-variant experiments, with the protocol in `results/dqn_variants_speed/`. `curriculum_generalization` and `cnn_generalization` each have their own `PROTOCOL.md` and `ANALYSIS.md`; `cnn_generalization` also keeps every run's trained network in `models/`. `--workers N` trains N runs at a time; runs are independent and seeded, so results are the same as with one worker (tested). Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
 
 Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.14.1 (CPU), NumPy 2.4.6, Matplotlib 3.11.2, pandas 3.0.6 and Gradio 6.30.0. Exact reproduction is guaranteed for the same software on the same machine. Other platforms should give statistically similar but not bit-identical numbers, because floating-point results can differ between builds.
 
@@ -409,7 +440,8 @@ Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.1
 - A larger layout pool, convolutional networks for the full-map observation, and longer training for the generalization study.
 - Optimistic initialisation or count-based exploration bonuses for DQN, to test the explanation of the terminal-hazard failure.
 - A reward variant without per-step penalties, to separate "mistakes" from reward design.
-- Convolutional or recurrent networks for the local-view generalization task (Stages E and F), since faster value propagation (shaping, 3-step returns) and an easiest-first curriculum did not improve it.
+- A pre-registered test of network width on held-out mazes, with fresh seeds and layouts, to confirm or reject the exploratory wide-MLP result of Section 6.11.
+- Recurrent networks for the local-view generalization task (Stage F), since faster value propagation (shaping, 3-step returns), an easiest-first curriculum and a CNN did not improve it.
 - A curriculum over maze size, or one that advances on success rather than on a fixed schedule, tested against a control with the same number of episodes on each maze.
 - Reward shaping with more seeds or more held-out mazes, to detect a generalization effect as small as +0.06 if there is one, and a hint the local-view agent can observe.
 - Hosting the dashboard permanently (for example, on Hugging Face Spaces).

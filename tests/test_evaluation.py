@@ -429,3 +429,28 @@ def test_curriculum_arm_smoke(tmp_path):
     first = [r["layout_seed"] for r in load_history(tmp_path / "tiny_curric" / "tabular_curric_s0")][:5]
     assert len(set(first)) <= 2
     assert load_experiment(tmp_path / "tiny_curric")["experiment"].arm_curriculum == exp.arm_curriculum
+
+
+def test_cnn_protocol_settings_and_fresh_layouts():
+    from src.evaluation import EXPERIMENTS
+    exp = EXPERIMENTS["cnn_generalization"]
+    assert exp.agents == ("dqn", "dqn_cnn", "dqn_wide") and exp.seeds == tuple(range(500, 510))
+    assert (exp.episodes, exp.decay_episodes, exp.eval_every) == (3000, 2000, 500)
+    configs = {a: exp.train_config(a, 500) for a in exp.agents}
+    assert [c.agent for c in configs.values()] == ["dqn", "dqn_cnn", "dqn"]
+    assert configs["dqn_wide"].agent_kwargs["hidden"] == [288, 288]
+    # identical apart from the network
+    def rest(c):
+        return (c.env_preset, c.env_overrides, c.agent_kwargs.get("epsilon"), c.episodes,
+                c.seed, c.curriculum)
+    assert len({json.dumps(rest(c), sort_keys=True) for c in configs.values()}) == 1
+    pool = tuple(exp.env_overrides["layout_pool"])
+    train, held = _layout_keys(exp, pool), _layout_keys(exp, exp.unseen_layouts)
+    assert len(train) == 50 and len(held) == 50 and not train & held
+    others = [e for n, e in EXPERIMENTS.items() if n != "cnn_generalization"]
+    used = set()
+    for e in others:
+        used |= set(e.env_overrides.get("layout_pool") or ()) | set(e.unseen_layouts or ())
+        used.add(e.env_overrides.get("layout_seed", 0))
+    assert not (set(pool) | set(exp.unseen_layouts)) & used
+    assert not set(exp.seeds) & set().union(*(e.seeds for e in others))
