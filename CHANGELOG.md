@@ -2,6 +2,21 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Recurrent Q-network with memory (Stage F)
+
+**Added**
+- `RecurrentQNetwork`: one hidden layer of 128 (ReLU), then a GRU with 128 memory units, then the Q-values. DQN options `recurrent` (memory size; 0, the default, builds networks exactly as before), `seq_length` and `burn_in`.
+- `SequenceReplayBuffer` (DRQN-style): records where each episode starts and ends and samples runs of consecutive steps that never cross into another episode, with up to `burn_in` earlier steps to rebuild the memory from zero (R2D2-style), never before the oldest stored step. Targets are Double DQN step by step with the target network's own memory; steps past an episode's end are masked.
+- An optional `begin_episode` hook, called by `run_episode` and by episode recording, so an agent with memory starts each episode blank.
+- Agent `dqn_rnn` (`RNN_DEFAULT`: memory 128, hidden (128,), 32 runs of 16 steps, burn-in 16; 109,572 weights) with a nickname and commentary line, in the dashboard's Train tab and About page, and a chart style. A recurrent agent refuses PER, mistake replay, n-step returns, dueling heads and convolutions. The policy map explains that it cannot show a memory agent's policy as one arrow per cell.
+- Experiment `rnn_generalization`, pre-registered in `results/rnn_generalization/PROTOCOL.md` with fresh seeds (600–609) and layouts (9500–9549 training; 9600–9651 except 9619 and 9632 held-out, which duplicated other mazes), arms `dqn`, `dqn_rnn` and `dqn_wide` (a pre-registered retest of Stage E's exploratory result). Results, analysis, all 30 trained networks in `models/` (9.9 MB, each checked to reproduce its saved results), two figures (`rnn_curves.png`, `rnn_success.png`), notebook cells, README and REPORT section 6.12.
+- 18 tests (284 in total): a recurrent step-by-step pass equals a whole-sequence pass, memory carries information forward and is cleared per episode, the default sizes, refused combinations, sequences staying inside one episode and after the oldest stored step, buffer and agent checkpoints, a learning step, the GRU agent solving a corridor, the protocol settings and fresh held-out mazes, and the dashboard with a recurrent agent. Plain DQN is unchanged: the first 300 episodes of `cnn_generalization` DQN seed 500 reproduce the saved log exactly.
+
+**Results**
+- `rnn_generalization`: memory helped. Held-out success 0.73 vs 0.29 for the standard MLP (Holm-corrected p = 0.0004, ahead in all 10 seeds); held-out revisits per episode 20.1 vs 44.1 (p = 0.0004). The same-size wide MLP reached 0.34 (exploratory, p = 0.0001 against the GRU), so the gain is not a matter of size; memory and the 16-step replay were not separated. The first change in the project to improve success on new mazes.
+- Stage E's exploratory wide-MLP result did not replicate (0.34 vs 0.29, Holm-corrected p = 0.32).
+- The run was stopped and resumed three times (a closed window, moving the project to another drive, an overnight pause) with the same command; resumption does not change results. It took about 11 hours against the 6 estimated. `run.log` was regenerated afterwards by rerunning the finished experiment (all CSVs byte-identical).
+
 ## Convolutional Q-network (Stage E)
 
 **Added**

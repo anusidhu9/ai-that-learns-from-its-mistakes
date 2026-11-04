@@ -1,0 +1,79 @@
+Experiment rnn_generalization: Train DQN with a local 5x5 view on 50 fresh mazes (9500-9549) with an MLP (128x128), a recurrent network with memory (128, then a 128-unit GRU) or a wide MLP of the same size (288x288); test on 50 held-out mazes (9600-9651 except 9619 and 9632). Seeds 600-609.
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent           split    seeds             success     path_efficiency               steps            mistakes             hazards
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.64 +/- 0.10       0.63 +/- 0.10      45.74 +/- 8.27      35.15 +/- 9.56       0.00 +/- 0.00
+dqn             unseen      10       0.29 +/- 0.07       0.29 +/- 0.07      74.98 +/- 6.04      68.23 +/- 6.93       0.00 +/- 0.00
+dqn_rnn         train       10       0.97 +/- 0.03       0.95 +/- 0.04      19.37 +/- 2.37       3.46 +/- 2.74       0.00 +/- 0.00
+dqn_rnn         unseen      10       0.73 +/- 0.08       0.68 +/- 0.08      39.69 +/- 6.46      25.86 +/- 7.62       0.00 +/- 0.00
+dqn_wide        train       10       0.64 +/- 0.10       0.63 +/- 0.10      45.71 +/- 8.40      34.59 +/- 9.53       0.00 +/- 0.00
+dqn_wide        unseen      10       0.34 +/- 0.07       0.34 +/- 0.07      70.88 +/- 6.38      62.96 +/- 7.29       0.00 +/- 0.00
+
+Episode reward, steps to goal (successful episodes only) and mistake types:
+agent           split    seeds        total_reward       steps_to_goal         hazard_rate          collisions            revisits
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10      -0.78 +/- 0.51      14.95 +/- 0.27       0.00 +/- 0.00       7.53 +/- 5.23      27.26 +/- 6.33
+dqn             unseen      10      -2.58 +/- 0.51      13.65 +/- 0.44       0.00 +/- 0.00      23.44 +/- 8.44      44.08 +/- 3.88
+dqn_rnn         train       10       0.65 +/- 0.15      16.53 +/- 0.24       0.00 +/- 0.00       1.52 +/- 1.80       1.91 +/- 1.97
+dqn_rnn         unseen      10      -0.37 +/- 0.35      17.28 +/- 0.92       0.00 +/- 0.00       5.50 +/- 2.42      20.09 +/- 6.36
+dqn_wide        train       10      -0.83 +/- 0.42      14.89 +/- 0.22       0.00 +/- 0.00       9.73 +/- 3.92      24.49 +/- 9.46
+dqn_wide        unseen      10      -2.39 +/- 0.30      14.00 +/- 0.76       0.00 +/- 0.00      23.45 +/- 3.69      38.85 +/- 8.53
+
+Success-rate differences (permutation test):
+  [train] dqn_rnn - dqn: +0.33  (p < 0.001)
+           Neural Ned (Remembers) beats Neural Ned on success (p < 0.001). Not a fluke.
+  [train] dqn_wide - dqn: -0.00  (p = 1.000)
+           dqn_wide vs Neural Ned on success: difference -0.00, p = 1.000. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_wide - dqn_rnn: -0.33  (p < 0.001)
+           Neural Ned (Remembers) beats dqn_wide on success (p < 0.001). Not a fluke.
+  [unseen] dqn_rnn - dqn: +0.44  (p < 0.001)
+           Neural Ned (Remembers) beats Neural Ned on success (p < 0.001). Not a fluke.
+  [unseen] dqn_wide - dqn: +0.05  (p = 0.321)
+           dqn_wide vs Neural Ned on success: difference +0.05, p = 0.321. The jury is still out; more seeds needed before anyone gloats.
+  [unseen] dqn_wide - dqn_rnn: -0.39  (p < 0.001)
+           Neural Ned (Remembers) beats dqn_wide on success (p < 0.001). Not a fluke.
+
+Learning speed: greedy success averaged over training checkpoints (permutation test):
+  dqn_rnn 0.908 vs dqn 0.652: difference +0.257  (p < 0.001)
+  dqn_wide 0.671 vs dqn 0.652: difference +0.019  (p = 0.347)
+  dqn_wide 0.671 vs dqn_rnn 0.908: difference -0.238  (p < 0.001)
+
+Other differences (permutation test):
+  [train] total_reward  dqn_rnn - dqn: +1.432  (p < 0.001)
+  [train] total_reward  dqn_wide - dqn: -0.055  (p = 0.861)
+  [train] total_reward  dqn_wide - dqn_rnn: -1.487  (p < 0.001)
+  [unseen] total_reward  dqn_rnn - dqn: +2.214  (p < 0.001)
+  [unseen] total_reward  dqn_wide - dqn: +0.198  (p = 0.464)
+  [unseen] total_reward  dqn_wide - dqn_rnn: -2.016  (p < 0.001)
+  [train] steps_to_goal dqn_rnn - dqn: +1.575  (p < 0.001)
+  [train] steps_to_goal dqn_wide - dqn: -0.064  (p = 0.681)
+  [train] steps_to_goal dqn_wide - dqn_rnn: -1.639  (p < 0.001)
+  [unseen] steps_to_goal dqn_rnn - dqn: +3.628  (p < 0.001)
+  [unseen] steps_to_goal dqn_wide - dqn: +0.348  (p = 0.407)
+  [unseen] steps_to_goal dqn_wide - dqn_rnn: -3.279  (p < 0.001)
+  [train] hazards       dqn_rnn - dqn: +0.000  (p = 1.000)
+  [train] hazards       dqn_wide - dqn: +0.000  (p = 1.000)
+  [train] hazards       dqn_wide - dqn_rnn: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_rnn - dqn: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_wide - dqn: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_wide - dqn_rnn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_rnn - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_wide - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_wide - dqn_rnn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_rnn - dqn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_wide - dqn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_wide - dqn_rnn: +0.000  (p = 1.000)
+  [train] collisions    dqn_rnn - dqn: -6.006  (p = 0.018)
+  [train] collisions    dqn_wide - dqn: +2.206  (p = 0.446)
+  [train] collisions    dqn_wide - dqn_rnn: +8.212  (p < 0.001)
+  [unseen] collisions    dqn_rnn - dqn: -17.946  (p < 0.001)
+  [unseen] collisions    dqn_wide - dqn: +0.006  (p = 0.999)
+  [unseen] collisions    dqn_wide - dqn_rnn: +17.952  (p < 0.001)
+
+Replay buffer at the end of training (transitions; mean over seeds):
+  dqn             added    143294  main overwrote    123294
+  dqn_rnn         added    123496  main overwrote    103496
+  dqn_wide        added    142659  main overwrote    122659
+
+Files written to runs\experiments_rnn\rnn_generalization

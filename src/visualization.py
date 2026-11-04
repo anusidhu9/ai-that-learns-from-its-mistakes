@@ -19,7 +19,8 @@ from src.evaluation import mean_ci
 from src.fun import event_line
 
 AGENT_ORDER = ("random", "tabular_q", "tabular_q_shaped", "dqn", "dqn_shaped", "dqn_dueling",
-               "dqn_nstep", "dqn_dueling_nstep", "dqn_curriculum", "dqn_cnn", "dqn_wide", "dqn_per",
+               "dqn_nstep", "dqn_dueling_nstep", "dqn_curriculum", "dqn_cnn", "dqn_rnn", "dqn_wide",
+               "dqn_per",
                "dqn_mistake", "dqn_per_mistake", "dqn_5k", "dqn_mistake_5k", "dqn_10k")
 AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn_per": "DQN + PER",
                 "dqn_mistake": "DQN + mistakes", "dqn_per_mistake": "DQN + PER + mistakes",
@@ -31,7 +32,7 @@ AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn
                 "dqn_dueling": "Dueling DQN", "dqn_nstep": "DQN (3-step)",
                 "dqn_dueling_nstep": "Dueling DQN (3-step)",
                 "dqn_curriculum": "DQN + curriculum", "dqn_cnn": "DQN (CNN)",
-                "dqn_wide": "DQN (wide MLP)"}
+                "dqn_rnn": "DQN (GRU memory)", "dqn_wide": "DQN (wide MLP)"}
 # Mistake-aware variants share their base algorithm's hue (no palette hue left
 # passes the colorblind checks beside orange and aqua) and add a second
 # encoding instead: dash-dot lines, square markers and hatched bars. Shaped
@@ -40,27 +41,29 @@ AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn
 # diamond, down-triangle and plus markers, and their own hatches; the
 # curriculum arm uses long-dash-dot lines, X markers and horizontal hatching;
 # the CNN arm long dashes, star markers and crossed hatching; the wide MLP
-# loose dots, pentagon markers and vertical hatching.
+# loose dots, pentagon markers and vertical hatching; the recurrent arm
+# dash-dot with short gaps, hexagon markers and circle hatching.
 AGENT_COLORS = {"random": "#8a8a85", "tabular_q": "#2a78d6", "dqn": "#eb6834", "dqn_per": "#1baf7a",
                 "dqn_mistake": "#eb6834", "dqn_per_mistake": "#1baf7a",
                 "dqn_5k": "#eb6834", "dqn_mistake_5k": "#eb6834", "dqn_10k": "#6250d6",
                 "tabular_q_shaped": "#2a78d6", "dqn_shaped": "#eb6834",
                 "dqn_dueling": "#eb6834", "dqn_nstep": "#eb6834", "dqn_dueling_nstep": "#eb6834",
-                "dqn_curriculum": "#eb6834", "dqn_cnn": "#eb6834", "dqn_wide": "#eb6834"}
+                "dqn_curriculum": "#eb6834", "dqn_cnn": "#eb6834", "dqn_wide": "#eb6834",
+                "dqn_rnn": "#eb6834"}
 AGENT_LINESTYLES = {"random": "--", "dqn_mistake": "-.", "dqn_per_mistake": "-.",
                     "dqn_mistake_5k": "-.", "tabular_q_shaped": ":", "dqn_shaped": ":",
                     "dqn_dueling": (0, (6, 2)), "dqn_nstep": (0, (1, 1)),
                     "dqn_dueling_nstep": (0, (6, 2, 1, 2, 1, 2)),
                     "dqn_curriculum": (0, (10, 3, 2, 3)), "dqn_cnn": (0, (12, 4)),
-                    "dqn_wide": (0, (1, 4))}
+                    "dqn_wide": (0, (1, 4)), "dqn_rnn": (0, (4, 1, 1, 1))}
 AGENT_MARKERS = {"dqn_mistake": "s", "dqn_per_mistake": "s", "dqn_mistake_5k": "s",
                  "tabular_q_shaped": "^", "dqn_shaped": "^", "dqn_dueling": "D",
                  "dqn_nstep": "v", "dqn_dueling_nstep": "P", "dqn_curriculum": "X",
-                 "dqn_cnn": "*", "dqn_wide": "p"}
+                 "dqn_cnn": "*", "dqn_wide": "p", "dqn_rnn": "h"}
 AGENT_HATCHES = {"dqn_mistake": "///", "dqn_per_mistake": "///", "dqn_mistake_5k": "///",
                  "tabular_q_shaped": "..", "dqn_shaped": "..", "dqn_dueling": "xx",
                  "dqn_nstep": "\\\\", "dqn_dueling_nstep": "++", "dqn_curriculum": "--",
-                 "dqn_cnn": "xxx", "dqn_wide": "||"}
+                 "dqn_cnn": "xxx", "dqn_wide": "||", "dqn_rnn": "oo"}
 MISTAKE_TYPES = ("collision", "revisit", "hazard", "timeout")
 MISTAKE_COLORS = {"collision": "#e87ba4", "revisit": "#6250d6", "hazard": "#e34948",
                   "timeout": "#eda100"}
@@ -516,6 +519,8 @@ def record_episode(env: GridWorld, agent, layout_seed: Optional[int] = None,
     agent.rng = np.random.default_rng(seed)
     try:
         obs, _ = env.reset(seed=seed, layout_seed=layout_seed)
+        if hasattr(agent, "begin_episode"):
+            agent.begin_episode()
         frames = [{"step": 0, "pos": env.pos, "action": None, "reward": 0.0, "total": 0.0,
                    "events": [], "q_values": agent.q_values(obs).tolist()
                    if hasattr(agent, "q_values") else None,
@@ -629,6 +634,9 @@ def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int
     cnn = load_experiment(results_dir / "cnn_generalization")
     save(experiment_curves_figure(cnn["curves"], "success"), "cnn_curves.png")
     save(experiment_bars_figure(cnn["summary"], "success"), "cnn_success.png")
+    rnn = load_experiment(results_dir / "rnn_generalization")
+    save(experiment_curves_figure(rnn["curves"], "success"), "rnn_curves.png")
+    save(experiment_bars_figure(rnn["summary"], "success"), "rnn_success.png")
 
     trainer = Trainer(TrainConfig(env_preset="maze", agent="tabular_q", episodes=400, seed=seed,
                                   agent_kwargs={"epsilon": {"decay_episodes": 300}}))

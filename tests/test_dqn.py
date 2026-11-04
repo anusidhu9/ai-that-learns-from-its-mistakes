@@ -5,9 +5,10 @@ import pytest
 import torch
 
 from src.agents import (DQNAgent, DQNConfig, EpsilonSchedule, QNetwork, RandomAgent,
-                        TabularQAgent, is_mistake, make_agent)
+                        RecurrentQNetwork, TabularQAgent, is_mistake, make_agent)
 from src.envs import EnvConfig, GridWorld, make_env
-from src.replay import MistakeReplayBuffer, PrioritizedReplayBuffer, ReplayBuffer
+from src.replay import (MistakeReplayBuffer, PrioritizedReplayBuffer, ReplayBuffer,
+                        SequenceReplayBuffer)
 from src.training import run_episode, train_agent
 
 CORRIDOR = """
@@ -514,6 +515,143 @@ def test_cnn_agent_solves_corridor():
     for seed in range(3):
         env = GridWorld.from_ascii(CORRIDOR, EnvConfig(max_steps=30, obs_mode="local"))
         agent = make_agent("dqn_cnn", env.obs_size, env.n_actions, seed=seed, hidden=(64,),
+                           learning_starts=64, epsilon=EpsilonSchedule(decay_episodes=40))
+        train_agent(env, agent, 100, seed=seed)
+        result = run_episode(env, agent, train=False, greedy=True)
+        solved += result["success"] and result["steps"] == 4
+    assert solved >= 2
+
+
+# -- recurrent DQN (memory) -------------------------------------------------------------
+
+def test_recurrent_network_step_matches_whole_sequence():
+    torch.manual_seed(0)
+    net = RecurrentQNetwork(6, 4, hidden=(8,), memory=5)
+    x = torch.randn(3, 7, 6)
+    q, memory = net(x)
+    assert q.shape == (3, 7, 4) and memory.shape == (3, 7, 5)
+    # feeding step t+1 after the memory at step t gives the sequence's own output
+    np.testing.assert_allclose(net.step(x[:, 1:], memory[:, :-1]).detach().numpy(),
+                               q[:, 1:].detach().numpy(), atol=1e-6)
+
+
+def test_recurrent_memory_carries_information_forward():
+    torch.manual_seed(0)
+    net = RecurrentQNetwork(6, 4, hidden=(8,), memory=5)
+    x = torch.randn(1, 10, 6, requires_grad=True)
+    q, _ = net(x)
+    q[0, -1].sum().backward()
+    assert x.grad[0, 0].abs().sum() > 0     # the last step's Q depends on the first observation
+    mlp_x = torch.randn(10, 6, requires_grad=True)
+    QNetwork(6, 4, hidden=(8,))(mlp_x)[-1].sum().backward()
+    assert mlp_x.grad[0].abs().sum() == 0   # a plain network's doesn't
+
+
+def test_recurrent_agent_memory_is_per_episode():
+    env = make_env("maze", obs_mode="local")
+    agent = make_agent("dqn_rnn", env.obs_size, env.n_actions, seed=0)
+    assert agent.recurrent and agent.name == "dqn_rnn"
+    obs, _ = env.reset(seed=0)
+    agent.begin_episode()
+    first = agent.q_values(obs)
+    np.testing.assert_allclose(agent.q_values(obs), first)   # looking doesn't remember
+    agent.act(obs, greedy=True)
+    assert not np.allclose(agent.q_values(obs), first)       # acting does
+    agent.begin_episode()
+    np.testing.assert_allclose(agent.q_values(obs), first)   # a new episode starts blank
+
+
+def test_rnn_default_sizes():
+    env = make_env("maze", obs_mode="local")
+    agent = make_agent("dqn_rnn", env.obs_size, env.n_actions)
+    cfg = agent.config
+    assert (cfg.recurrent, cfg.hidden, cfg.batch_size, cfg.seq_length, cfg.burn_in) ==         (128, (128,), 32, 16, 16)
+    assert sum(p.numel() for p in agent.online.parameters()) == 109_572
+    wide = make_agent("dqn", env.obs_size, env.n_actions, hidden=(288, 288))
+    assert sum(p.numel() for p in wide.online.parameters()) == 106_852
+
+
+@pytest.mark.parametrize("option", [dict(prioritized=True), dict(mistake_replay=True),
+                                    dict(n_step=3), dict(dueling=True), dict(conv=(4,))])
+def test_recurrent_agent_refuses_other_options(option):
+    with pytest.raises(ValueError, match="recurrent"):
+        DQNAgent(75, 4, DQNConfig(recurrent=8, **option))
+
+
+def fill_episodes(buffer, lengths, timeout_last=False):
+    """Episodes of the given lengths; obs[0] holds (episode number, step)."""
+    for e, n in enumerate(lengths):
+        for k in range(n):
+            last = k == n - 1
+            buffer.add(np.array([e, k], dtype=np.float32), 0, 0.0, np.array([e, k + 1]),
+                       terminated=last and not timeout_last, truncated=last and timeout_last)
+
+
+def test_sequences_stay_inside_one_episode():
+    buffer = SequenceReplayBuffer(1000, 2, seed=0)
+    fill_episodes(buffer, [3, 9, 1, 12, 5, 7])
+    batch = buffer.sample_sequences(200, length=4, burn_in=3)
+    obs, valid, mask = batch["obs"], batch["valid"], batch["mask"].astype(bool)
+    assert obs.shape == (200, 7, 2)
+    for row in range(200):
+        steps = obs[row, valid[row]]
+        assert len(set(steps[:, 0])) == 1                        # one episode
+        assert np.all(np.diff(steps[:, 1]) == 1)                 # consecutive steps
+        assert valid[row, 0] and not np.any(np.diff(valid[row].astype(int)) > 0)
+        trained = np.flatnonzero(mask[row])
+        burn = trained[0]
+        assert 1 <= len(trained) <= 4 and np.all(valid[row, trained])
+        # burn-in is as long as allowed: min(3, steps since the episode began)
+        assert burn == min(3, int(obs[row, burn, 1]))
+
+
+def test_sequences_respect_the_oldest_stored_step():
+    buffer = SequenceReplayBuffer(10, 2, seed=1)
+    fill_episodes(buffer, [7, 8])                # 15 steps: the first 5 are overwritten
+    oldest = buffer.obs[buffer.pos].copy()
+    assert tuple(oldest) == (0, 5)
+    batch = buffer.sample_sequences(300, length=3, burn_in=4)
+    for row in range(300):
+        steps = [tuple(o) for o in batch["obs"][row, batch["valid"][row]]]
+        assert all(s >= (0, 5) for s in steps)   # nothing from before the oldest stored step
+        assert len({e for e, _ in steps}) == 1
+
+
+def test_sequence_buffer_round_trip():
+    buffer = SequenceReplayBuffer(50, 2, seed=0)
+    fill_episodes(buffer, [4, 6, 3], timeout_last=True)
+    buffer.add(np.zeros(2), 0, 0.0, np.zeros(2), False)   # an episode in progress
+    copy = SequenceReplayBuffer(50, 2, seed=0)
+    copy.load_state_dict(pickle.loads(pickle.dumps(buffer.state_dict())))
+    np.testing.assert_array_equal(copy.episode_step[:14], buffer.episode_step[:14])
+    np.testing.assert_array_equal(copy.episode_end[:14], buffer.episode_end[:14])
+    assert copy._step == buffer._step == 1
+
+
+def test_recurrent_learning_step_and_checkpoint():
+    env = make_env("maze", obs_mode="local")
+    agent = make_agent("dqn_rnn", env.obs_size, env.n_actions, seed=0, learning_starts=20,
+                       batch_size=4)
+    train_agent(env, agent, 2, seed=0)
+    assert agent.updates > 0
+    blob = pickle.dumps(agent.state_dict(include_buffer=True))
+    restored = make_agent("dqn_rnn", env.obs_size, env.n_actions, seed=1)
+    restored.load_state_dict(pickle.loads(blob))
+    obs, _ = env.reset(seed=5)
+    agent.begin_episode()
+    restored.begin_episode()
+    np.testing.assert_allclose(restored.q_values(obs), agent.q_values(obs))
+    with pytest.raises(ValueError):
+        make_agent("dqn", env.obs_size, env.n_actions, hidden=(128,)).load_state_dict(
+            pickle.loads(blob))
+
+
+def test_recurrent_agent_solves_corridor():
+    solved = 0
+    for seed in range(3):
+        env = GridWorld.from_ascii(CORRIDOR, EnvConfig(max_steps=30, obs_mode="local"))
+        agent = make_agent("dqn_rnn", env.obs_size, env.n_actions, seed=seed, hidden=(32,),
+                           recurrent=32, batch_size=8, seq_length=4, burn_in=4,
                            learning_starts=64, epsilon=EpsilonSchedule(decay_episodes=40))
         train_agent(env, agent, 100, seed=seed)
         result = run_episode(env, agent, train=False, greedy=True)

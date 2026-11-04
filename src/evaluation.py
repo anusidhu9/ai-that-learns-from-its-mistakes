@@ -235,6 +235,14 @@ CURRICULUM = {"start": 10, "full_at": 1500}
 CN_SEEDS = tuple(range(500, 510))
 CN_POOL = tuple(range(9300, 9350))
 CN_HELDOUT = tuple(range(9400, 9450))
+# Memory study (pre-registered in results/rnn_generalization/PROTOCOL.md): fresh
+# seeds and layouts, settings fixed in advance. dqn_wide (same size as the GRU
+# network, 106,852 vs 109,572 weights) retests Stage E's exploratory result.
+# Held-out 9619 is the same maze as training layout 9544 and 9632 repeats 9623,
+# so 9650 and 9651 replace them.
+RN_SEEDS = tuple(range(600, 610))
+RN_POOL = tuple(range(9500, 9550))
+RN_HELDOUT = tuple(s for s in range(9600, 9652) if s not in (9619, 9632))
 
 EXPERIMENTS: Dict[str, Experiment] = {
     "fixed_maze": Experiment(
@@ -321,6 +329,16 @@ EXPERIMENTS: Dict[str, Experiment] = {
                     "MLP (128x128), a CNN (two 3x3 convolutions, 16 and 32 channels, then "
                     "128) or a wide MLP of the CNN's size (288x288); test on 50 held-out "
                     "mazes (9400-9449). Seeds 500-509."),
+    "rnn_generalization": Experiment(
+        "rnn_generalization", "maze",
+        env_overrides={"layout_pool": list(RN_POOL), "obs_mode": "local"},
+        agents=("dqn", "dqn_rnn", "dqn_wide"), seeds=RN_SEEDS,
+        episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=RN_HELDOUT,
+        agent_types={"dqn_wide": "dqn"}, agent_kwargs={"dqn_wide": {"hidden": [288, 288]}},
+        description="Train DQN with a local 5x5 view on 50 fresh mazes (9500-9549) with an "
+                    "MLP (128x128), a recurrent network with memory (128, then a 128-unit "
+                    "GRU) or a wide MLP of the same size (288x288); test on 50 held-out "
+                    "mazes (9600-9651 except 9619 and 9632). Seeds 600-609."),
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},

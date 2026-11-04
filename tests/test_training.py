@@ -25,6 +25,10 @@ CURRIC = dict(agent="tabular_q", agent_kwargs={"epsilon": {"decay_episodes": 20}
               episodes=30, seed=3, checkpoint_every=5,
               env_overrides={"layout_pool": list(range(20)), "obs_mode": "local"},
               curriculum={"start": 3, "full_at": 20})
+# small buffer, so the sequence buffer wraps around during the run
+DQN_RNN = {**DQN, "agent": "dqn_rnn",
+           "agent_kwargs": {**DQN["agent_kwargs"], "recurrent": 16, "buffer_size": 300,
+                            "batch_size": 4, "seq_length": 4, "burn_in": 4}}
 DQN_PER_MISTAKE = {**DQN, "agent": "dqn_per_mistake",
                    "agent_kwargs": {**DQN["agent_kwargs"], "mistake_capacity": 300,
                                     "mistake_events": ["collision", "hazard"]}}
@@ -130,8 +134,8 @@ def test_in_memory_trainer_writes_nothing(tmp_path, monkeypatch):
 
 # -- checkpoints and exact resumption -------------------------------------------------------
 
-@pytest.mark.parametrize("cfg", [TABULAR, DQN, DQN_PER_MISTAKE, CURRIC],
-                         ids=["tabular", "dqn", "dqn_per_mistake", "curriculum"])
+@pytest.mark.parametrize("cfg", [TABULAR, DQN, DQN_PER_MISTAKE, CURRIC, DQN_RNN],
+                         ids=["tabular", "dqn", "dqn_per_mistake", "curriculum", "dqn_rnn"])
 def test_resumed_run_matches_uninterrupted_run(tmp_path, cfg):
     full = tmp_path / "full"
     Trainer(TrainConfig(**cfg), full).train()

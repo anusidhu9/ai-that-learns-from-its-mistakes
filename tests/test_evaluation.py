@@ -454,3 +454,28 @@ def test_cnn_protocol_settings_and_fresh_layouts():
         used.add(e.env_overrides.get("layout_seed", 0))
     assert not (set(pool) | set(exp.unseen_layouts)) & used
     assert not set(exp.seeds) & set().union(*(e.seeds for e in others))
+
+
+def test_rnn_protocol_settings_and_fresh_layouts():
+    from src.evaluation import EXPERIMENTS
+    exp = EXPERIMENTS["rnn_generalization"]
+    assert exp.agents == ("dqn", "dqn_rnn", "dqn_wide") and exp.seeds == tuple(range(600, 610))
+    assert (exp.episodes, exp.decay_episodes, exp.eval_every) == (3000, 2000, 500)
+    configs = {a: exp.train_config(a, 600) for a in exp.agents}
+    assert [c.agent for c in configs.values()] == ["dqn", "dqn_rnn", "dqn"]
+    assert configs["dqn_wide"].agent_kwargs["hidden"] == [288, 288]
+    def rest(c):
+        return (c.env_preset, c.env_overrides, c.agent_kwargs.get("epsilon"), c.episodes,
+                c.seed, c.curriculum)
+    assert len({json.dumps(rest(c), sort_keys=True) for c in configs.values()}) == 1
+    pool = tuple(exp.env_overrides["layout_pool"])
+    assert len(exp.unseen_layouts) == 50 and 9619 not in exp.unseen_layouts
+    train, held = _layout_keys(exp, pool), _layout_keys(exp, exp.unseen_layouts)
+    assert len(train) == 50 and len(held) == 50 and not train & held
+    others = [e for n, e in EXPERIMENTS.items() if n != "rnn_generalization"]
+    used = set()
+    for e in others:
+        used |= set(e.env_overrides.get("layout_pool") or ()) | set(e.unseen_layouts or ())
+        used.add(e.env_overrides.get("layout_seed", 0))
+    assert not (set(pool) | set(exp.unseen_layouts)) & used
+    assert not set(exp.seeds) & set().union(*(e.seeds for e in others))

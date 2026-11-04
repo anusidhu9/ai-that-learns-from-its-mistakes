@@ -15,6 +15,9 @@ state still has future value, so we keep bootstrapping from it.
 
 `info` is the environment's info dict for the step. Only mistake-aware replay
 reads it (for info["events"]); every agent works without it.
+
+Agents with memory (recurrent DQN) also define `agent.begin_episode()`, which
+clears the memory; run_episode calls it after every reset when it exists.
 """
 from __future__ import annotations
 
@@ -27,7 +30,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.replay import MistakeReplayBuffer, PrioritizedReplayBuffer, ReplayBuffer
+from src.replay import (MistakeReplayBuffer, PrioritizedReplayBuffer, ReplayBuffer,
+                        SequenceReplayBuffer)
 
 
 @dataclass
@@ -221,6 +225,9 @@ class DQNConfig:
     n_step: int = 1                 # learn from n rewards before bootstrapping
     conv: Tuple[int, ...] = ()      # 3x3 conv channels before the hidden layers (empty: MLP)
     conv_input: Tuple[int, int, int] = (3, 5, 5)  # (channels, rows, cols) of the image part
+    recurrent: int = 0              # GRU memory units after the hidden layers (0: no memory)
+    seq_length: int = 16            # recurrent: consecutive steps trained on per sequence
+    burn_in: int = 16               # recurrent: earlier steps that only rebuild the memory
 
 
 class QNetwork(nn.Module):
@@ -286,24 +293,66 @@ class QNetwork(nn.Module):
         return self.value(h) + advantage - advantage.mean(dim=1, keepdim=True)
 
 
+class RecurrentQNetwork(nn.Module):
+    """Q-network with memory (DRQN, Hausknecht & Stone, 2015).
+
+    Each observation passes through the hidden layers, then a GRU whose state
+    carries information from earlier steps of the episode, then a linear layer
+    to one Q-value per action:
+
+        h_t = GRU(layers(o_t), h_{t-1}),   h_{-1} = 0,   Q(o_<=t, .) = W h_t + b
+
+    forward runs whole sequences shaped (batch, steps, obs) and returns the
+    Q-values and the memory after every step; step continues from given
+    memories by one observation each.
+    """
+
+    def __init__(self, obs_size: int, n_actions: int, hidden: Tuple[int, ...] = (128,),
+                 memory: int = 128):
+        super().__init__()
+        layers, size = [], obs_size
+        for width in hidden:
+            layers += [nn.Linear(size, width), nn.ReLU()]
+            size = width
+        self.net = nn.Sequential(*layers)
+        self.gru = nn.GRU(size, memory, batch_first=True)
+        self.head = nn.Linear(memory, n_actions)
+
+    def forward(self, x: torch.Tensor, h: Optional[torch.Tensor] = None):
+        out, _ = self.gru(self.net(x), h)
+        return self.head(out), out
+
+    def step(self, x: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
+        """Q-values for observations x (..., obs) seen with memories h (..., memory)."""
+        shape = x.shape[:-1]
+        x = x.reshape(-1, 1, x.shape[-1])
+        q, _ = self.forward(x, h.reshape(1, -1, h.shape[-1]).contiguous())
+        return q.reshape(*shape, -1)
+
+
 DQN_NICKNAMES = {"dqn": "Neural Ned", "dqn_per": "Neural Ned (Holds Grudges)",
                  "dqn_mistake": "Neural Ned (Keeps a Diary)",
                  "dqn_per_mistake": "Neural Ned (Holds Grudges, Keeps a Diary)",
                  "dqn_dueling": "Neural Ned (Two-Headed)",
                  "dqn_nstep": "Neural Ned (Looks Ahead)",
                  "dqn_dueling_nstep": "Neural Ned (Two-Headed, Looks Ahead)",
-                 "dqn_cnn": "Neural Ned (Sees Patterns)"}
+                 "dqn_cnn": "Neural Ned (Sees Patterns)",
+                 "dqn_rnn": "Neural Ned (Remembers)"}
 N_STEP_DEFAULT = 3  # n for the named n-step agents (as in Rainbow, Hessel et al., 2018)
 # Network of the named CNN agent: two 3x3 convolutions (16 and 32 channels) over
 # the 5x5 local view, then one hidden layer of 128.
 CNN_DEFAULT = dict(conv=(16, 32), hidden=(128,))
+# Recurrent agent: one hidden layer of 128, a GRU with 128 memory units, and
+# batches of 32 sequences (16 trained steps each, after up to 16 burn-in steps).
+RNN_DEFAULT = dict(recurrent=128, hidden=(128,), batch_size=32)
 
 
 def dqn_name(config: DQNConfig) -> str:
-    """'dqn' plus '_per', '_cnn', '_dueling', '_nstep' and '_mistake' for each
-    option on, e.g. 'dqn_per_mistake' or 'dqn_dueling_nstep'."""
+    """'dqn' plus '_per', '_cnn', '_rnn', '_dueling', '_nstep' and '_mistake'
+    for each option on, e.g. 'dqn_per_mistake' or 'dqn_dueling_nstep'."""
     return ("dqn_per" if config.prioritized else "dqn") + \
         ("_cnn" if config.conv else "") + \
+        ("_rnn" if config.recurrent else "") + \
         ("_dueling" if config.dueling else "") + \
         ("_nstep" if config.n_step > 1 else "") + \
         ("_mistake" if config.mistake_replay else "")
@@ -342,6 +391,14 @@ class DQNAgent:
     default (n_step = 1, dueling = False) and then the agent is unchanged.
     conv adds convolutional layers in front of the network (see QNetwork); off
     by default (conv = ()).
+
+    recurrent = m > 0 gives the agent a memory: a GRU with m units (see
+    RecurrentQNetwork), cleared by begin_episode. It learns from runs of
+    seq_length consecutive steps of one episode (batch_size runs per update),
+    each after up to burn_in steps that rebuild the memory without being
+    trained on; the loss is the mean over the trained steps. It can't be
+    combined with PER, mistake replay, n-step returns, dueling heads or
+    convolutions.
     """
 
     def __init__(self, obs_size: int, n_actions: int, config: Optional[DQNConfig] = None,
@@ -361,14 +418,25 @@ class DQNAgent:
         if cfg.n_step > 1 and cfg.mistake_replay:
             raise ValueError("n-step returns can't be combined with mistake replay: "
                              "it is undefined which of the n steps makes the mistake")
-        self.online = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling, cfg.conv,
-                               cfg.conv_input)
-        self.target = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling, cfg.conv,
-                               cfg.conv_input)
+        self.recurrent = cfg.recurrent > 0
+        if self.recurrent and (cfg.prioritized or cfg.mistake_replay or cfg.n_step > 1
+                               or cfg.dueling or cfg.conv):
+            raise ValueError("a recurrent agent can't be combined with PER, mistake replay, "
+                             "n-step returns, dueling heads or convolutions")
+        if self.recurrent:
+            self.online = RecurrentQNetwork(obs_size, n_actions, cfg.hidden, cfg.recurrent)
+            self.target = RecurrentQNetwork(obs_size, n_actions, cfg.hidden, cfg.recurrent)
+        else:
+            self.online = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling, cfg.conv,
+                                   cfg.conv_input)
+            self.target = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling, cfg.conv,
+                                   cfg.conv_input)
         self.target.load_state_dict(self.online.state_dict())
         self.target.eval()
         self.optimizer = torch.optim.Adam(self.online.parameters(), lr=cfg.lr)
-        if cfg.prioritized:
+        if self.recurrent:
+            self.buffer = SequenceReplayBuffer(cfg.buffer_size, obs_size, seed=seed)
+        elif cfg.prioritized:
             self.buffer = PrioritizedReplayBuffer(cfg.buffer_size, obs_size,
                                                   alpha=cfg.per_alpha, seed=seed)
         else:
@@ -383,6 +451,9 @@ class DQNAgent:
         # n-step: the last (obs, action, reward) of the current episode not yet
         # stored. Empty between episodes, so checkpoints never need it.
         self._recent: deque = deque()
+        # recurrent: the memory after the observations acted on so far this
+        # episode (None = zero). Cleared by begin_episode; never checkpointed.
+        self._memory: Optional[torch.Tensor] = None
 
     @property
     def epsilon(self) -> float:
@@ -394,12 +465,32 @@ class DQNAgent:
         frac = min(1.0, self.updates / max(1, cfg.per_beta_steps))
         return cfg.per_beta_start + (1.0 - cfg.per_beta_start) * frac
 
+    def begin_episode(self) -> None:
+        """Clear the memory (recurrent agents); nothing to do otherwise."""
+        self._memory = None
+
+    @torch.no_grad()
+    def _recurrent_step(self, obs: np.ndarray):
+        x = torch.as_tensor(np.asarray(obs, dtype=np.float32)).reshape(1, 1, -1)
+        q, memory = self.online(x, None if self._memory is None else self._memory.reshape(1, 1, -1))
+        return q.reshape(-1).numpy().astype(np.float64), memory.reshape(-1)
+
     @torch.no_grad()
     def q_values(self, obs: np.ndarray) -> np.ndarray:
+        """Q-values for obs. A recurrent agent answers with its current memory
+        and does not remember obs afterwards (only act does)."""
+        if self.recurrent:
+            return self._recurrent_step(obs)[0]
         x = torch.as_tensor(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
         return self.online(x).squeeze(0).numpy().astype(np.float64)
 
     def act(self, obs: np.ndarray, greedy: bool = False) -> int:
+        if self.recurrent:
+            # every observation enters the memory, exploratory steps included
+            q, self._memory = self._recurrent_step(obs)
+            if not greedy and self.rng.random() < self.epsilon:
+                return int(self.rng.integers(self.n_actions))
+            return greedy_action(q, self.rng)
         if not greedy and self.rng.random() < self.epsilon:
             return int(self.rng.integers(self.n_actions))
         return greedy_action(self.q_values(obs), self.rng)
@@ -412,6 +503,8 @@ class DQNAgent:
                             mistake=is_mistake(info, self.config.mistake_events))
         elif self.config.n_step > 1:
             self._add_n_step(obs, action, reward, next_obs, terminated, truncated)
+        elif self.recurrent:
+            self.buffer.add(obs, action, reward, next_obs, terminated, truncated=truncated)
         else:
             self.buffer.add(obs, action, reward, next_obs, terminated)
         self.env_steps += 1
@@ -436,6 +529,8 @@ class DQNAgent:
                 break
 
     def _learn(self) -> dict:
+        if self.recurrent:
+            return self._learn_sequences()
         cfg = self.config
         batch = self.buffer.sample(cfg.batch_size, beta=self.beta)
         obs = torch.as_tensor(batch["obs"])
@@ -471,6 +566,47 @@ class DQNAgent:
         if self.updates % cfg.target_update == 0:
             self.target.load_state_dict(self.online.state_dict())
         return {"loss": float(loss.item()), "td_error": float(np.abs(td).mean())}
+
+    def _learn_sequences(self) -> dict:
+        """One gradient step on batch_size replayed sequences (recurrent agents).
+
+        Each step's target uses the memory built over the sequence so far: the
+        next observation is fed to the network after the memory at that step,
+        which also handles timeouts and the window's last step exactly.
+        """
+        cfg = self.config
+        batch = self.buffer.sample_sequences(cfg.batch_size, cfg.seq_length, cfg.burn_in)
+        obs = torch.as_tensor(batch["obs"])               # (batch, steps, obs)
+        actions = torch.as_tensor(batch["actions"])
+        rewards = torch.as_tensor(batch["rewards"])
+        next_obs = torch.as_tensor(batch["next_obs"])
+        terminated = torch.as_tensor(batch["terminated"])
+        mask = torch.as_tensor(batch["mask"])
+
+        q_all, memory = self.online(obs)
+        q = q_all.gather(2, actions.unsqueeze(2)).squeeze(2)
+        with torch.no_grad():
+            _, target_memory = self.target(obs)
+            next_target = self.target.step(next_obs, target_memory)
+            if cfg.double:
+                best = self.online.step(next_obs, memory.detach()).argmax(dim=2, keepdim=True)
+                next_q = next_target.gather(2, best).squeeze(2)
+            else:
+                next_q = next_target.max(dim=2).values
+            y = rewards + cfg.gamma * (1.0 - terminated) * next_q
+
+        n = mask.sum()
+        loss = (mask * F.smooth_l1_loss(q, y, reduction="none")).sum() / n
+        self.optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm_(self.online.parameters(), cfg.grad_clip)
+        self.optimizer.step()
+
+        self.updates += 1
+        if self.updates % cfg.target_update == 0:
+            self.target.load_state_dict(self.online.state_dict())
+        td_error = float(((y - q).detach().abs() * mask).sum() / n)
+        return {"loss": float(loss.item()), "td_error": td_error}
 
     def end_episode(self) -> None:
         self.episodes += 1
@@ -508,7 +644,8 @@ class DQNAgent:
                 or cfg["prioritized"] != self.config.prioritized
                 or cfg.get("mistake_replay", False) != self.config.mistake_replay
                 or cfg.get("dueling", False) != self.config.dueling
-                or cfg.get("n_step", 1) != self.config.n_step):
+                or cfg.get("n_step", 1) != self.config.n_step
+                or cfg.get("recurrent", 0) != self.config.recurrent):
             raise ValueError("checkpoint network, replay type or n-step setting differs "
                              "from this agent")
         self.config = DQNConfig(**cfg)
@@ -530,8 +667,9 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
 
     DQN variants: 'dqn', 'dqn_per' (prioritized replay), 'dqn_mistake'
     (mistake-aware replay), 'dqn_per_mistake' (both), 'dqn_dueling' (dueling
-    heads), 'dqn_nstep' (3-step returns), 'dqn_dueling_nstep' and 'dqn_cnn'
-    (convolutional network, see CNN_DEFAULT). kwargs go to
+    heads), 'dqn_nstep' (3-step returns), 'dqn_dueling_nstep', 'dqn_cnn'
+    (convolutional network, see CNN_DEFAULT) and 'dqn_rnn' (recurrent network
+    with memory, see RNN_DEFAULT). kwargs go to
     TabularQAgent, or become DQNConfig fields for the DQN variants.
     """
     if name == "random":
@@ -546,6 +684,9 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
             kwargs.setdefault("n_step", N_STEP_DEFAULT)
         if "_cnn" in name:
             for key, value in CNN_DEFAULT.items():
+                kwargs.setdefault(key, value)
+        if "_rnn" in name:
+            for key, value in RNN_DEFAULT.items():
                 kwargs.setdefault(key, value)
         return DQNAgent(obs_size, n_actions, DQNConfig(**kwargs), seed=seed)
     raise ValueError(f"unknown agent {name!r}; choose random, tabular_q or one of "

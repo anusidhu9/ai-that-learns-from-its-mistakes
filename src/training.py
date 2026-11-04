@@ -65,6 +65,8 @@ def run_episode(env: GridWorld, agent, train: bool = True, greedy: bool = False,
     none), path efficiency, the reward split by event, and the mistake log.
     """
     obs, _ = env.reset(seed=seed, layout_seed=layout_seed)
+    if hasattr(agent, "begin_episode"):  # agents with memory start each episode blank
+        agent.begin_episode()
     epsilon = 0.0 if greedy else agent.epsilon
     td_errors, losses = [], []
     info: dict = {}

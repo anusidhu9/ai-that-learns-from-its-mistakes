@@ -41,13 +41,15 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **3-step returns made DQN learn a maze much faster; dueling heads didn't help.** On a fresh maze, 3-step DQN's learning speed was 0.86 against 0.37 (pre-registered, p = 0.0003 after correction, ahead in all 10 seeds). Neither change measurably helped on new mazes. See [below](#dueling-and-n-step-dqn).
 - **Training on easy mazes first made DQN learn more slowly.** With the same 50 mazes in easiest-first order, DQN learned them more slowly (0.72 vs 0.85, pre-registered, p = 0.0003 after correction, behind in all 10 seeds). On new mazes it was 0.49 vs 0.57, not a significant difference (p = 0.093). See [below](#training-curriculum).
 - **A convolutional network didn't help on new mazes.** With 3×3 convolutions over its 5×5 view, DQN solved 0.27 of new mazes against 0.33 for the standard network, and learned no faster (pre-registered, p = 0.55 for both after correction). See [below](#convolutional-q-network).
+- **A memory made DQN much better on new mazes.** With a GRU memory that lasts through the episode, DQN solved 0.73 of new mazes against 0.29 for the standard network, ahead in all 10 seeds (pre-registered, p = 0.0004 after correction), and 0.34 for a plain network of the same size. It is the first change in this project to improve success on mazes the agent has never seen. See [below](#recurrent-q-network-memory).
 - **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
 
 **What it does not (yet) support**
 - Whether prioritized replay helps or hurts: DQN + PER never differed significantly from plain DQN.
 - How common DQN's late collapse is: it happened in 1 of 10 hazard-maze runs, too few to estimate a rate.
 - That mistake memory *hurts*: it was behind plain DQN on held-out mazes in 9 of 10 seeds, but the difference was not significant (p = 0.082).
-- That a bigger network generalizes better: a plain network the size of the CNN solved 0.47 of new mazes against 0.33 (p = 0.019), but that arm was exploratory and the p-value is uncorrected. It needs a new pre-registered test.
+- That a bigger network generalizes better: in the CNN study a plain network of the CNN's size solved 0.47 of new mazes against 0.33 (exploratory, p = 0.019 uncorrected), but a pre-registered retest with fresh seeds and mazes did not replicate it (0.34 vs 0.29, p = 0.32).
+- That the memory itself, rather than how the memory network is trained, explains its gain: it also learns from runs of 16 consecutive steps, so each update trains on up to 8× as many steps as the other networks. A plain network of the same size rules out size, not this.
 
 | Learning to avoid mistakes (fixed maze) | When fewer mistakes is not better (terminal hazards) |
 |---|---|
@@ -134,11 +136,27 @@ Can a network built for images recognise maze patterns better? In [`cnn_generali
 
 *p-values are Holm-corrected.*
 
-The CNN cost about 4× the compute of the MLP for no measurable gain. The surprise was the exploratory wide MLP: 0.47 on held-out mazes (p = 0.019 against the MLP, p = 0.004 against the CNN, both uncorrected). It is the first variant in Stages C–H to stand out on new mazes, but because it was exploratory it needs its own pre-registered test before it counts as a finding.
+The CNN cost about 4× the compute of the MLP for no measurable gain. The surprise was the exploratory wide MLP: 0.47 on held-out mazes (p = 0.019 against the MLP, p = 0.004 against the CNN, both uncorrected). Because it was exploratory it was retested in the next study with fresh seeds and mazes, and it did not replicate (0.34 vs 0.29, p = 0.32; see below).
 
 All 30 trained networks are in [`results/cnn_generalization/models/`](results/cnn_generalization/models) (9.8 MB). Load one in the dashboard's **Checkpoints** tab, or with `load_agent`, to evaluate it or watch it play.
 
 ![Success on training and held-out mazes, CNN study](docs/figures/cnn_success.png)
+
+### Recurrent Q-network (memory)
+
+With a 5×5 view, the agent cannot tell whether it has been somewhere before, and on new mazes the standard DQN mostly failed by wandering until time ran out. Does a memory help? In [`rnn_generalization`](results/rnn_generalization/ANALYSIS.md) ([protocol](results/rnn_generalization/PROTOCOL.md), written before the run, fresh seeds 600–609 and fresh mazes), three versions of DQN train on the **same 50 mazes** for 3,000 episodes: the standard MLP (128 × 128), **DQN (GRU memory)** (`dqn_rnn`: 128 units, then a GRU with 128 memory units, cleared at the start of each episode, learning from runs of 16 consecutive steps), and a **wide MLP** (288 × 288) with about as many weights, which also retests the CNN study's exploratory result.
+
+| Question | DQN (MLP) | Other network | Verdict |
+|---|---|---|---|
+| Does memory solve more **held-out** mazes? | 0.29 ± 0.07 | 0.73 ± 0.08 (GRU) | **Yes** (p = 0.0004, ahead in 10/10 seeds) |
+| Does memory revisit cells less on held-out mazes? | 44.1 per episode | 20.1 (GRU) | **Yes** (p = 0.0004, fewer in 10/10 seeds) |
+| Does a wide MLP solve more held-out mazes? | 0.29 ± 0.07 | 0.34 ± 0.07 (wide) | No evidence (p = 0.32): **not replicated** |
+
+*p-values are Holm-corrected.*
+
+The memory network also beat the same-size wide MLP on held-out mazes (0.73 vs 0.34, exploratory, p = 0.0001), so its gain is not about size. It learned its training mazes almost perfectly (0.97 vs 0.64) and helped most on long mazes (0.64 vs 0.16 on the 31 held-out mazes longer than the shortest path length). Much of the drop in revisits comes from finishing sooner; revisits per step fell only from 0.60 to 0.49 (p = 0.048, exploratory). It is not yet known whether the gain comes from the memory itself or from training on 16-step runs (see [the analysis](results/rnn_generalization/ANALYSIS.md#interpretation)). A memory run took 1–2 hours against about 9 minutes for an MLP. All 30 trained networks are in [`results/rnn_generalization/models/`](results/rnn_generalization/models) (9.9 MB).
+
+![Success on training and held-out mazes, memory study](docs/figures/rnn_success.png)
 
 ## Quick start
 
@@ -215,6 +233,8 @@ Experiments are **resumable**: if Colab disconnects, run the same command again 
 - **DQN + mistakes** (`dqn_mistake`, also `dqn_per_mistake`): keeps every collision and hazard transition in a 5,000-transition reserve as well as the normal buffer, and draws 25% of each batch from it.
 - **Dueling DQN** (`dqn_dueling`): value and advantage heads, `Q = V + A − mean(A)`.
 - **3-step DQN** (`dqn_nstep`, also `dqn_dueling_nstep`): targets `r_t + γ r_{t+1} + γ² r_{t+2} + γ³ Q_target(s_{t+3}, ·)`, with shorter tails at the end of an episode.
+- **Convolutional DQN** (`dqn_cnn`): two 3×3 convolutions over the 5×5 view before one hidden layer.
+- **DQN with memory** (`dqn_rnn`): a GRU carries a memory through the episode; it replays runs of 16 consecutive steps, rebuilding the memory from up to 16 earlier steps first (burn-in).
 
 Exploration is ε-greedy, decaying linearly from 1.0 to 0.05. Timeouts are treated as truncation (the agent still bootstraps), not as true terminal states.
 
@@ -238,14 +258,14 @@ The commentator only reads the logs; it never changes a reward, an agent or a re
 ```
 src/
   envs.py           grid worlds, rewards, mistake events
-  agents.py         random, tabular Q-learning, DQN (+ Double, dueling, n-step, CNN), agent factory
-  replay.py         uniform and prioritized replay buffers (sum tree)
+  agents.py         random, tabular Q-learning, DQN (+ Double, dueling, n-step, CNN, GRU), agent factory
+  replay.py         uniform, prioritized (sum tree), mistake and sequence replay buffers
   training.py       Trainer: logs, checkpoints, exact resumption, CLI
   evaluation.py     greedy evaluation, multi-seed experiments, statistics, CLI
   visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              266 tests (pytest); `-m "not slow"` skips one long training test
+tests/              284 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report
@@ -261,7 +281,7 @@ LICENSE             MIT License
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
 - 5–10 seeds per experiment: enough to show large differences, not small ones.
-- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule and one CNN architecture. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
+- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule, one CNN architecture and one recurrent setting (GRU 128, runs of 16 steps). Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 
 See [REPORT.md](REPORT.md) for the full discussion. To write up a new experiment, start from [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md); to publish your own copy, follow [docs/PUBLISHING.md](docs/PUBLISHING.md).

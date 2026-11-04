@@ -19,6 +19,9 @@ MistakeReplayBuffer wraps either one and additionally keeps a copy of every
 mistake transition (collision, hazard) in a reserved buffer, so each batch
 can mix ordinary experience with remembered mistakes in a fixed proportion.
 
+SequenceReplayBuffer also remembers episode boundaries, so a recurrent agent
+can replay runs of consecutive steps from one episode.
+
 Every transition can also carry its own bootstrap discount (`discounts`),
 which n-step DQN needs because a transition cut short by the end of an
 episode spans fewer than n steps. One-step DQN never reads it.
@@ -322,3 +325,72 @@ class MistakeReplayBuffer:
         self.reserve_added_at[:] = 0
         if "reserve_added_at" in state:
             self.reserve_added_at[:len(self.reserve)] = state["reserve_added_at"]
+
+
+class SequenceReplayBuffer(ReplayBuffer):
+    """ReplayBuffer that also records where each episode starts and ends, so a
+    recurrent agent can replay runs of consecutive steps from one episode
+    (DRQN, Hausknecht & Stone, 2015).
+
+    sample_sequences picks a first step t uniformly and returns the window
+    t - b, ..., t + length - 1 of the same episode, where the b <= burn_in
+    earlier steps only rebuild the network's memory and are not trained on
+    (burn-in, Kapturowski et al., 2019). The memory starts at zero at the
+    window's first step, which is exact when the window starts at the
+    episode's first step and an approximation otherwise. A window never
+    crosses into another episode; steps past the episode's end are padding
+    and are masked out.
+    """
+
+    def __init__(self, capacity: int, obs_size: int, seed: Optional[int] = None):
+        super().__init__(capacity, obs_size, seed=seed)
+        self.episode_step = np.zeros(capacity, dtype=np.int64)  # 0 at an episode's first step
+        self.episode_end = np.zeros(capacity, dtype=bool)       # terminated or truncated here
+        self._step = 0
+
+    def add(self, obs, action, reward, next_obs, terminated,
+            discount: Optional[float] = None, truncated: bool = False) -> int:
+        i = super().add(obs, action, reward, next_obs, terminated, discount)
+        end = bool(terminated or truncated)
+        self.episode_step[i] = self._step
+        self.episode_end[i] = end
+        self._step = 0 if end else self._step + 1
+        return i
+
+    def sample_sequences(self, batch_size: int, length: int,
+                         burn_in: int = 0) -> Dict[str, np.ndarray]:
+        """Arrays shaped (batch_size, burn_in + length[, obs_size]), each row one
+        window starting at its first burn-in step. `mask` is 1 on the steps to
+        train on; `valid` marks every step that belongs to the episode."""
+        if self.size == 0:
+            raise ValueError("cannot sample from an empty buffer")
+        n = self.size
+        oldest = self.pos if n == self.capacity else 0   # physical slot of the oldest step
+        t = self.rng.integers(0, n, size=batch_size)      # in age order, 0 = oldest
+        # burn-in can't reach before the episode's start or the oldest stored step
+        b = np.minimum(np.minimum(self.episode_step[(oldest + t) % self.capacity], burn_in), t)
+        steps = np.arange(burn_in + length)
+        age = (t - b)[:, None] + steps[None, :]
+        idx = (oldest + np.minimum(age, n - 1)) % self.capacity
+        ends = self.episode_end[idx]
+        ended_before = np.cumsum(ends, axis=1) - ends     # episode ends earlier in the window
+        valid = (age < n) & (ended_before == 0)
+        mask = valid & (steps >= b[:, None]) & (steps < (b + length)[:, None])
+        return {"obs": self.obs[idx], "actions": self.actions[idx],
+                "rewards": self.rewards[idx], "next_obs": self.next_obs[idx],
+                "terminated": self.terminated[idx], "mask": mask.astype(np.float32),
+                "valid": valid, "indices": idx}
+
+    def state_dict(self) -> dict:
+        state = super().state_dict()
+        n = self.size
+        state.update(episode_step=self.episode_step[:n].copy(),
+                     episode_end=self.episode_end[:n].copy(), step=self._step)
+        return state
+
+    def load_state_dict(self, state: dict) -> None:
+        super().load_state_dict(state)
+        n = state["size"]
+        self.episode_step[:n] = state["episode_step"]
+        self.episode_end[:n] = state["episode_end"]
+        self._step = int(state["step"])
