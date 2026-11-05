@@ -27,7 +27,7 @@ from typing import Callable, Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from src.agents import DQN_NICKNAMES, DQNAgent, EpsilonSchedule, make_agent
+from src.agents import DQN_NICKNAMES, DQNAgent, EpsilonSchedule, PPOAgent, make_agent
 from src.envs import (EnvConfig, GridWorld, PRESETS, RewardConfig, check_layout,
                       parse_layout, rank_layouts)
 
@@ -154,7 +154,7 @@ class TrainConfig:
     episodes: int = 400
     seed: int = 0
     checkpoint_every: int = 50
-    save_buffer: bool = True        # DQN: store replay buffer for exact resumption
+    save_buffer: bool = True        # DQN replay buffer / PPO rollout, for exact resumption
     layout_text: Optional[str] = None
     curriculum: Optional[dict] = None
 
@@ -319,7 +319,7 @@ class Trainer:
 
     def checkpoint_state(self, include_buffer: Optional[bool] = None) -> dict:
         include_buffer = self.config.save_buffer if include_buffer is None else include_buffer
-        if isinstance(self.agent, DQNAgent):
+        if isinstance(self.agent, (DQNAgent, PPOAgent)):
             agent_state = self.agent.state_dict(include_buffer=include_buffer)
         else:
             agent_state = self.agent.state_dict()
@@ -437,7 +437,7 @@ def export_weights(checkpoint: PathLike, out: PathLike) -> Path:
     (the target network starts as a copy); Trainer.load_checkpoint refuses it."""
     state = _read_checkpoint(checkpoint)
     agent = dict(state["agent"])
-    for key in ("buffer", "target", "optimizer"):
+    for key in ("buffer", "target", "optimizer", "rollout"):
         agent.pop(key, None)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -2,6 +2,21 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## PPO, a policy learner (Stage I)
+
+**Added**
+- `PPOAgent` and `PPOConfig` (`make_agent("ppo")`): Proximal Policy Optimization with a clipped objective and GAE. An actor (77 → 128 → 128 → 4, tanh, orthogonal initialisation) and a separate critic of the same shape; rollouts of 2,048 steps that may span episodes, 4 epochs in minibatches of 256, clip 0.2, λ 0.95, γ 0.99, Adam 3e-4, entropy bonus 0.01, critic weight 0.5, gradient clip 0.5. Standard published settings, fixed in advance and not tuned. Timeouts bootstrap from the critic. No ε: it samples its policy to explore, and an ε schedule passed to it (as the dashboard does) is ignored.
+- PPO checkpoints save the half-collected rollout (`save_buffer`), so a resumed run continues exactly; `export_weights` leaves it out.
+- The policy map and step-by-step replays work for policy agents: arrows show the most likely move, shaded by the critic's value, and replays show move probabilities instead of Q-values. PPO is in the dashboard's Train tab and About page, with a nickname, a tagline and its own chart style (purple, short dashes).
+- Experiment `ppo_generalization`, pre-registered in `results/ppo_generalization/PROTOCOL.md` with fresh seeds (700–709) and layouts (9700–9749 training, 9800–9849 held-out, no duplicates). `Experiment.train_config` gives PPO no ε schedule. Results, analysis, all 20 trained networks in `models/` (3.3 MB, each checked to reproduce its saved results), two figures (`ppo_curves.png`, `ppo_success.png`), notebook cells, README and REPORT section 6.13.
+- 16 tests (300 in total): GAE against its definition across episode ends, timeouts bootstrapping and terminals not, no leaking between episodes, the initial policy and greedy choice, network sizes, one update per rollout, the clipped update favouring rewarded moves, settings checks, PPO solving a corridor, exact resumption mid-rollout and determinism, checkpoints without the rollout, exported weights, the policy map and replays, the protocol settings and fresh layouts, and the dashboard with PPO. Plain DQN is unchanged: 300 episodes of `rnn_generalization` DQN seed 600 reproduce the saved log exactly.
+
+**Changed**
+- A test that used `"ppo"` as an example of an unknown agent name now uses `"a2c"`.
+
+**Results**
+- `ppo_generalization`: PPO solved slightly more held-out mazes (0.69 vs 0.64, Holm-corrected p = 0.037, ahead in 8 of 10 seeds), all on the longer mazes, and learned its training mazes more slowly (learning speed 0.826 vs 0.896, p = 0.0003, behind in all 10 seeds; level at the end). Exploratory: sampling its moves instead of playing greedily raised PPO's held-out success to 0.90; DQN was not evaluated that way. A PPO run cost about a quarter of a DQN run's time. The run was not interrupted; `run.log` was regenerated in UTF-8 afterwards (all CSVs byte-identical).
+
 ## Recurrent Q-network with memory (Stage F)
 
 **Added**

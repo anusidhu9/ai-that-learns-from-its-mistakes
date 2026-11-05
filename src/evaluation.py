@@ -182,7 +182,10 @@ class Experiment:
     arm_curriculum: Dict[str, dict] = field(default_factory=dict)
 
     def train_config(self, agent: str, seed: int) -> TrainConfig:
-        kwargs = {} if agent == "random" else {"epsilon": {"decay_episodes": self.decay_episodes}}
+        kind = self.agent_types.get(agent, agent)
+        # random never explores on a schedule; PPO explores by sampling its policy
+        kwargs = {} if kind in ("random", "ppo") else \
+            {"epsilon": {"decay_episodes": self.decay_episodes}}
         kwargs.update(self.agent_kwargs.get(agent, {}))
         overrides = {**self.env_overrides, **self.arm_env_overrides.get(agent, {})}
         return TrainConfig(env_preset=self.env_preset, env_overrides=overrides,
@@ -243,6 +246,12 @@ CN_HELDOUT = tuple(range(9400, 9450))
 RN_SEEDS = tuple(range(600, 610))
 RN_POOL = tuple(range(9500, 9550))
 RN_HELDOUT = tuple(s for s in range(9600, 9652) if s not in (9619, 9632))
+# PPO study (pre-registered in results/ppo_generalization/PROTOCOL.md): fresh seeds
+# and layouts, PPO settings (PPOConfig defaults) fixed in advance (never tuned).
+# No held-out maze repeats a training maze or another held-out maze (checked).
+PP_SEEDS = tuple(range(700, 710))
+PP_POOL = tuple(range(9700, 9750))
+PP_HELDOUT = tuple(range(9800, 9850))
 
 EXPERIMENTS: Dict[str, Experiment] = {
     "fixed_maze": Experiment(
@@ -339,6 +348,14 @@ EXPERIMENTS: Dict[str, Experiment] = {
                     "MLP (128x128), a recurrent network with memory (128, then a 128-unit "
                     "GRU) or a wide MLP of the same size (288x288); test on 50 held-out "
                     "mazes (9600-9651 except 9619 and 9632). Seeds 600-609."),
+    "ppo_generalization": Experiment(
+        "ppo_generalization", "maze",
+        env_overrides={"layout_pool": list(PP_POOL), "obs_mode": "local"},
+        agents=("dqn", "ppo"), seeds=PP_SEEDS,
+        episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=PP_HELDOUT,
+        description="Train DQN and PPO (same 128x128 network size, PPO with separate actor "
+                    "and critic) with a local 5x5 view on 50 fresh mazes (9700-9749); test "
+                    "on 50 held-out mazes (9800-9849). Seeds 700-709."),
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},

@@ -159,7 +159,7 @@ def test_train_with_reward_shaping():
 
 
 @pytest.mark.parametrize("agent", ["dqn_dueling", "dqn_nstep", "dqn_dueling_nstep", "dqn_cnn",
-                                   "dqn_rnn"])
+                                   "dqn_rnn", "ppo"])
 def test_train_tab_offers_dueling_and_n_step(agent):
     assert agent in [value for _, value in app.AGENT_CHOICES]
     state = app.new_session()
@@ -176,4 +176,14 @@ def test_recurrent_agent_has_no_policy_map_but_plays():
         pass
     fig, message = app.policy_map_ui(state, "Training layout")
     assert fig is None and "memory" in message
+    assert "Episode result" in app.record_replay(state, "Training layout", 0)[1]
+
+
+def test_ppo_policy_map_and_replay():
+    state = app.new_session()
+    for last in app.train_agent_ui("maze", "ppo", 50, 0, 20, state):
+        pass
+    assert "samples its moves" in last[0]
+    fig, message = app.policy_map_ui(state, "Training layout")
+    assert fig is not None and "critic" in message
     assert "Episode result" in app.record_replay(state, "Training layout", 0)[1]

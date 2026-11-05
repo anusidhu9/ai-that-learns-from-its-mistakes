@@ -43,8 +43,9 @@ def test_make_agent_builds_every_variant():
     assert not isinstance(mis.buffer.main, PrioritizedReplayBuffer)
     assert both.name == "dqn_per_mistake" and isinstance(both.buffer.main, PrioritizedReplayBuffer)
     assert not isinstance(dqn.buffer, MistakeReplayBuffer)  # off by default
+    assert make_agent("ppo", 8, 4).name == "ppo"
     with pytest.raises(ValueError):
-        make_agent("ppo", 8, 4)
+        make_agent("a2c", 8, 4)
 
 
 def test_no_learning_before_learning_starts():

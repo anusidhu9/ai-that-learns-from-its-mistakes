@@ -42,6 +42,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **Training on easy mazes first made DQN learn more slowly.** With the same 50 mazes in easiest-first order, DQN learned them more slowly (0.72 vs 0.85, pre-registered, p = 0.0003 after correction, behind in all 10 seeds). On new mazes it was 0.49 vs 0.57, not a significant difference (p = 0.093). See [below](#training-curriculum).
 - **A convolutional network didn't help on new mazes.** With 3×3 convolutions over its 5×5 view, DQN solved 0.27 of new mazes against 0.33 for the standard network, and learned no faster (pre-registered, p = 0.55 for both after correction). See [below](#convolutional-q-network).
 - **A memory made DQN much better on new mazes.** With a GRU memory that lasts through the episode, DQN solved 0.73 of new mazes against 0.29 for the standard network, ahead in all 10 seeds (pre-registered, p = 0.0004 after correction), and 0.34 for a plain network of the same size. It is the first change in this project to improve success on mazes the agent has never seen. See [below](#recurrent-q-network-memory).
+- **PPO generalised slightly better than DQN but learned more slowly.** With standard settings for both, PPO solved 0.69 of new mazes against 0.64 (pre-registered, p = 0.037 after correction), all of it on the longer mazes, and learned its training mazes more slowly (0.83 vs 0.90, p = 0.0003, behind in all 10 seeds). See [below](#ppo-a-policy-learner).
 - **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
 
 **What it does not (yet) support**
@@ -50,6 +51,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - That mistake memory *hurts*: it was behind plain DQN on held-out mazes in 9 of 10 seeds, but the difference was not significant (p = 0.082).
 - That a bigger network generalizes better: in the CNN study a plain network of the CNN's size solved 0.47 of new mazes against 0.33 (exploratory, p = 0.019 uncorrected), but a pre-registered retest with fresh seeds and mazes did not replicate it (0.34 vs 0.29, p = 0.32).
 - That the memory itself, rather than how the memory network is trained, explains its gain: it also learns from runs of 16 consecutive steps, so each update trains on up to 8× as many steps as the other networks. A plain network of the same size rules out size, not this.
+- That PPO beats DQN by a wide margin: PPO solved 0.90 of new mazes when it sampled its moves instead of taking the most likely one, but DQN was only ever evaluated greedily, so that number has nothing to compare against yet.
 
 | Learning to avoid mistakes (fixed maze) | When fewer mistakes is not better (terminal hazards) |
 |---|---|
@@ -158,6 +160,21 @@ The memory network also beat the same-size wide MLP on held-out mazes (0.73 vs 0
 
 ![Success on training and held-out mazes, memory study](docs/figures/rnn_success.png)
 
+### PPO, a policy learner
+
+Every agent above learns how good each move is. **PPO** (`ppo`) learns the policy itself, a probability for each move, plus a critic that judges how good a cell is, and it learns only from the steps it has just played, with no replay buffer. In [`ppo_generalization`](results/ppo_generalization/ANALYSIS.md) ([protocol](results/ppo_generalization/PROTOCOL.md), written before the run, fresh seeds 700–709 and fresh mazes), DQN and PPO train on the **same 50 mazes** for 3,000 episodes, each with its standard settings and neither tuned.
+
+| Question | DQN | PPO | Verdict |
+|---|---|---|---|
+| Does PPO solve more **held-out** mazes? | 0.64 ± 0.04 | 0.69 ± 0.03 | **Yes, slightly** (p = 0.037, ahead in 8/10 seeds) |
+| Does PPO learn the training mazes faster? | 0.896 | 0.826 | **No: slower** (p = 0.0003, behind in 10/10 seeds) |
+
+*p-values are Holm-corrected.*
+
+PPO caught up on the training mazes by the end (0.93 vs 0.94), and its held-out advantage came entirely from the longer mazes (0.54 vs 0.43). The surprise was exploratory: when PPO **sampled** its moves instead of always taking the most likely one, it solved **0.90** of the held-out mazes, because a little randomness gets it out of the loops a 5×5 view leads it into. DQN was not tested that way, so that is not a head-to-head result. A PPO run took about 2 minutes against 7 for DQN. All 20 trained networks are in [`results/ppo_generalization/models/`](results/ppo_generalization/models) (3.3 MB).
+
+![Success on training and held-out mazes, PPO study](docs/figures/ppo_success.png)
+
 ## Quick start
 
 **In Colab (no setup):** click the badge above, then *Runtime → Run all*. The notebook clones this repository, runs the tests, trains all agents, shows the results and launches the dashboard with a public link.
@@ -235,6 +252,7 @@ Experiments are **resumable**: if Colab disconnects, run the same command again 
 - **3-step DQN** (`dqn_nstep`, also `dqn_dueling_nstep`): targets `r_t + γ r_{t+1} + γ² r_{t+2} + γ³ Q_target(s_{t+3}, ·)`, with shorter tails at the end of an episode.
 - **Convolutional DQN** (`dqn_cnn`): two 3×3 convolutions over the 5×5 view before one hidden layer.
 - **DQN with memory** (`dqn_rnn`): a GRU carries a memory through the episode; it replays runs of 16 consecutive steps, rebuilding the memory from up to 16 earlier steps first (burn-in).
+- **PPO** (`ppo`): an actor (move probabilities) and a critic (value of a cell), trained with the clipped PPO objective and GAE on rollouts of 2,048 steps; it explores by sampling its own policy, so it has no ε.
 
 Exploration is ε-greedy, decaying linearly from 1.0 to 0.05. Timeouts are treated as truncation (the agent still bootstraps), not as true terminal states.
 
@@ -258,14 +276,14 @@ The commentator only reads the logs; it never changes a reward, an agent or a re
 ```
 src/
   envs.py           grid worlds, rewards, mistake events
-  agents.py         random, tabular Q-learning, DQN (+ Double, dueling, n-step, CNN, GRU), agent factory
+  agents.py         random, tabular Q-learning, DQN (+ Double, dueling, n-step, CNN, GRU), PPO, agent factory
   replay.py         uniform, prioritized (sum tree), mistake and sequence replay buffers
   training.py       Trainer: logs, checkpoints, exact resumption, CLI
   evaluation.py     greedy evaluation, multi-seed experiments, statistics, CLI
   visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              284 tests (pytest); `-m "not slow"` skips one long training test
+tests/              300 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report
@@ -281,7 +299,7 @@ LICENSE             MIT License
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
 - 5–10 seeds per experiment: enough to show large differences, not small ones.
-- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule, one CNN architecture and one recurrent setting (GRU 128, runs of 16 steps). Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
+- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule, one CNN architecture, one recurrent setting (GRU 128, runs of 16 steps) and one set of standard PPO settings. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 
 See [REPORT.md](REPORT.md) for the full discussion. To write up a new experiment, start from [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md); to publish your own copy, follow [docs/PUBLISHING.md](docs/PUBLISHING.md).

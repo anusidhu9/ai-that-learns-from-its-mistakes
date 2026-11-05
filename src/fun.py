@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 from typing import Dict, List, Optional, Sequence
 
-from src.agents import DQN_NICKNAMES, RandomAgent, TabularQAgent
+from src.agents import DQN_NICKNAMES, PPOAgent, RandomAgent, TabularQAgent
 from src.evaluation import format_p
 from src.training import mistake_hotspots
 
@@ -22,6 +22,7 @@ NICKNAMES: Dict[str, str] = {
     RandomAgent.name: RandomAgent.nickname,
     TabularQAgent.name: TabularQAgent.nickname,
     **DQN_NICKNAMES,
+    PPOAgent.name: PPOAgent.nickname,
 }
 
 TAGLINES: Dict[str, str] = {
@@ -36,6 +37,7 @@ TAGLINES: Dict[str, str] = {
     "dqn_dueling_nstep": "Two heads, three steps of patience.",
     "dqn_cnn": "Knows a dead end when it sees one, wherever it sees it.",
     "dqn_rnn": "Remembers where it has been. Mostly.",
+    "ppo": "Skips the spreadsheet of values and just plays the odds.",
 }
 
 _EVENT_LINES: Dict[str, Sequence[str]] = {

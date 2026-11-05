@@ -662,6 +662,241 @@ class DQNAgent:
             self.buffer.load_state_dict(state["buffer"])
 
 
+@dataclass
+class PPOConfig:
+    """Hyperparameters for PPOAgent: the common published defaults for small
+    discrete tasks (Schulman et al., 2017; as in CleanRL and Stable-Baselines3),
+    fixed before any experiment and not tuned."""
+
+    hidden: Tuple[int, ...] = (128, 128)
+    lr: float = 3e-4
+    gamma: float = 0.99
+    gae_lambda: float = 0.95
+    n_steps: int = 2048             # env steps collected per update (may span episodes)
+    epochs: int = 4                 # passes over each rollout
+    minibatch_size: int = 256
+    clip: float = 0.2               # PPO probability-ratio clip
+    entropy_coef: float = 0.01
+    value_coef: float = 0.5
+    grad_clip: float = 0.5
+    normalize_advantages: bool = True  # per minibatch
+
+
+def _orthogonal(layer: nn.Linear, gain: float) -> nn.Linear:
+    nn.init.orthogonal_(layer.weight, gain)
+    nn.init.zeros_(layer.bias)
+    return layer
+
+
+class PolicyNetwork(nn.Module):
+    """MLP with tanh hidden layers and orthogonal initialisation, as in common
+    PPO implementations. out_gain 0.01 for the actor makes the initial policy
+    nearly uniform; 1.0 for the critic."""
+
+    def __init__(self, obs_size: int, out_size: int, hidden: Tuple[int, ...], out_gain: float):
+        super().__init__()
+        layers, size = [], obs_size
+        for h in hidden:
+            layers += [_orthogonal(nn.Linear(size, h), float(np.sqrt(2))), nn.Tanh()]
+            size = h
+        layers.append(_orthogonal(nn.Linear(size, out_size), out_gain))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+class PPOAgent:
+    """Proximal Policy Optimization with a clipped objective (Schulman et al., 2017).
+
+    An actor network gives the probability of each move, pi(a | s), and a
+    separate critic network estimates the state value V(s). The agent plays
+    n_steps environment steps with its current policy (episodes may end and
+    start inside a rollout), then learns from them and discards them: no
+    replay buffer. Advantages use GAE (Schulman et al., 2016):
+
+        delta_t = r_t + gamma * V(s'_t) * (1 - terminated_t) - V(s_t)
+        A_t     = delta_t + gamma * lambda * (1 - done_t) * A_{t+1}
+
+    so a timeout still bootstraps from V(s'_t) (done but not terminated) and
+    the rollout's last step bootstraps too. Each update makes `epochs` passes
+    over the rollout in shuffled minibatches and minimises
+
+        L = -mean min(rho A, clip(rho, 1 - c, 1 + c) A)
+            + value_coef * mean (V(s) - (A + V_old(s)))^2 - entropy_coef * entropy
+
+    with rho = pi(a|s) / pi_old(a|s). pi_old and V_old are the networks that
+    collected the rollout: they do not change while it is collected, so they
+    are computed from the stored steps just before the first gradient step.
+
+    It explores by sampling from pi; greedy play takes the most likely move
+    (ties broken at random). There is no epsilon: `epsilon` is 0.
+    """
+
+    name = "ppo"
+    nickname = "Polly the Policy"
+
+    def __init__(self, obs_size: int, n_actions: int, config: Optional[PPOConfig] = None,
+                 seed: Optional[int] = None):
+        self.obs_size = obs_size
+        self.n_actions = n_actions
+        self.config = config if config is not None else PPOConfig()
+        cfg = self.config
+        if cfg.n_steps % cfg.minibatch_size != 0:
+            raise ValueError("n_steps must be a multiple of minibatch_size")
+        self.rng = np.random.default_rng(seed)
+        if seed is not None:
+            torch.manual_seed(seed)
+        self.actor = PolicyNetwork(obs_size, n_actions, cfg.hidden, 0.01)
+        self.critic = PolicyNetwork(obs_size, 1, cfg.hidden, 1.0)
+        self.optimizer = torch.optim.Adam(
+            list(self.actor.parameters()) + list(self.critic.parameters()), lr=cfg.lr)
+        self.episodes = 0
+        self.env_steps = 0
+        self.updates = 0
+        self._new_rollout()
+
+    def _new_rollout(self) -> None:
+        n, size = self.config.n_steps, self.obs_size
+        self.rollout = {"obs": np.zeros((n, size), np.float32),
+                        "next_obs": np.zeros((n, size), np.float32),
+                        "actions": np.zeros(n, np.int64),
+                        "rewards": np.zeros(n, np.float32),
+                        "terminated": np.zeros(n, np.float32),
+                        "truncated": np.zeros(n, np.float32)}
+        self.rollout_size = 0
+
+    @property
+    def epsilon(self) -> float:
+        return 0.0
+
+    @torch.no_grad()
+    def policy_probs(self, obs: np.ndarray) -> np.ndarray:
+        """pi(. | obs), the probability of each move."""
+        x = torch.as_tensor(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
+        probs = torch.softmax(self.actor(x), dim=1).squeeze(0).numpy().astype(np.float64)
+        return probs / probs.sum()
+
+    @torch.no_grad()
+    def state_value(self, obs: np.ndarray) -> float:
+        """The critic's V(obs)."""
+        x = torch.as_tensor(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
+        return float(self.critic(x).item())
+
+    def act(self, obs: np.ndarray, greedy: bool = False) -> int:
+        probs = self.policy_probs(obs)
+        if greedy:
+            return greedy_action(probs, self.rng)
+        return int(self.rng.choice(self.n_actions, p=probs))
+
+    def update(self, obs, action, reward, next_obs, terminated, truncated,
+               info: Optional[dict] = None) -> Optional[dict]:
+        """Store the step; when the rollout is full, learn from it and clear it."""
+        i, r = self.rollout_size, self.rollout
+        r["obs"][i], r["next_obs"][i] = obs, next_obs
+        r["actions"][i], r["rewards"][i] = action, reward
+        r["terminated"][i], r["truncated"][i] = float(terminated), float(truncated)
+        self.rollout_size += 1
+        self.env_steps += 1
+        if self.rollout_size < self.config.n_steps:
+            return None
+        stats = self._learn()
+        self._new_rollout()
+        return stats
+
+    def advantages(self) -> Tuple[np.ndarray, np.ndarray]:
+        """GAE advantages and value targets (A + V_old) for the stored rollout."""
+        cfg, r, n = self.config, self.rollout, self.rollout_size
+        with torch.no_grad():
+            values = self.critic(torch.as_tensor(r["obs"][:n])).squeeze(1).numpy()
+            next_values = self.critic(torch.as_tensor(r["next_obs"][:n])).squeeze(1).numpy()
+        term, done = r["terminated"][:n], np.maximum(r["terminated"][:n], r["truncated"][:n])
+        deltas = r["rewards"][:n] + cfg.gamma * next_values * (1.0 - term) - values
+        adv = np.zeros(n, np.float32)
+        running = 0.0
+        for t in reversed(range(n)):
+            running = deltas[t] + cfg.gamma * cfg.gae_lambda * (1.0 - done[t]) * running
+            adv[t] = running
+        return adv, (adv + values).astype(np.float32)
+
+    def _learn(self) -> dict:
+        cfg, r, n = self.config, self.rollout, self.rollout_size
+        adv_all, returns_all = self.advantages()
+        obs_all = torch.as_tensor(r["obs"][:n])
+        actions_all = torch.as_tensor(r["actions"][:n])
+        with torch.no_grad():
+            old_logp_all = torch.log_softmax(self.actor(obs_all), dim=1) \
+                .gather(1, actions_all.unsqueeze(1)).squeeze(1)
+        adv_all, returns_all = torch.as_tensor(adv_all), torch.as_tensor(returns_all)
+        params = list(self.actor.parameters()) + list(self.critic.parameters())
+        losses, value_errors = [], []
+        for _ in range(cfg.epochs):
+            order = self.rng.permutation(n)
+            for start in range(0, n, cfg.minibatch_size):
+                idx = torch.as_tensor(order[start:start + cfg.minibatch_size])
+                obs, actions = obs_all[idx], actions_all[idx]
+                adv, returns, old_logp = adv_all[idx], returns_all[idx], old_logp_all[idx]
+                if cfg.normalize_advantages and len(idx) > 1:
+                    adv = (adv - adv.mean()) / (adv.std() + 1e-8)
+                logp_all = torch.log_softmax(self.actor(obs), dim=1)
+                logp = logp_all.gather(1, actions.unsqueeze(1)).squeeze(1)
+                entropy = -(logp_all.exp() * logp_all).sum(dim=1).mean()
+                ratio = torch.exp(logp - old_logp)
+                policy_loss = -torch.min(ratio * adv,
+                                         torch.clamp(ratio, 1 - cfg.clip, 1 + cfg.clip) * adv).mean()
+                value = self.critic(obs).squeeze(1)
+                value_loss = ((value - returns) ** 2).mean()
+                loss = policy_loss + cfg.value_coef * value_loss - cfg.entropy_coef * entropy
+                self.optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(params, cfg.grad_clip)
+                self.optimizer.step()
+                losses.append(float(loss.item()))
+                value_errors.append(float((value - returns).detach().abs().mean()))
+        self.updates += 1
+        # td_error: mean |V(s) - value target|, the critic's error (logged like DQN's)
+        return {"loss": float(np.mean(losses)), "td_error": float(np.mean(value_errors))}
+
+    def end_episode(self) -> None:
+        self.episodes += 1
+
+    def state_dict(self, include_buffer: bool = False) -> dict:
+        """include_buffer also saves the half-collected rollout, so a resumed
+        run continues exactly; without it a resumed run starts a new rollout."""
+        state = {"name": self.name, "obs_size": self.obs_size, "n_actions": self.n_actions,
+                 "config": asdict(self.config), "actor": self.actor.state_dict(),
+                 "critic": self.critic.state_dict(), "optimizer": self.optimizer.state_dict(),
+                 "episodes": self.episodes, "env_steps": self.env_steps, "updates": self.updates}
+        if include_buffer:
+            n = self.rollout_size
+            state["rollout"] = {k: v[:n].copy() for k, v in self.rollout.items()}
+        return state
+
+    def load_state_dict(self, state: dict) -> None:
+        if state["obs_size"] != self.obs_size or state["n_actions"] != self.n_actions:
+            raise ValueError("checkpoint has a different observation or action size")
+        cfg = dict(state["config"])
+        cfg["hidden"] = tuple(cfg["hidden"])
+        if cfg["hidden"] != tuple(self.config.hidden) or cfg["n_steps"] != self.config.n_steps:
+            raise ValueError("checkpoint network or rollout length differs from this agent")
+        self.config = PPOConfig(**cfg)
+        self.actor.load_state_dict(state["actor"])
+        self.critic.load_state_dict(state["critic"])
+        # Weights-only files (training.export_weights) have no optimizer state or rollout.
+        if "optimizer" in state:
+            self.optimizer.load_state_dict(state["optimizer"])
+        self.episodes = int(state["episodes"])
+        self.env_steps = int(state["env_steps"])
+        self.updates = int(state["updates"])
+        self._new_rollout()
+        if "rollout" in state:
+            saved = state["rollout"]
+            n = len(saved["actions"])
+            for k in self.rollout:
+                self.rollout[k][:n] = saved[k]
+            self.rollout_size = n
+
+
 def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = None, **kwargs):
     """Build an agent by name: 'random', 'tabular_q', or a DQN variant.
 
@@ -669,13 +904,17 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
     (mistake-aware replay), 'dqn_per_mistake' (both), 'dqn_dueling' (dueling
     heads), 'dqn_nstep' (3-step returns), 'dqn_dueling_nstep', 'dqn_cnn'
     (convolutional network, see CNN_DEFAULT) and 'dqn_rnn' (recurrent network
-    with memory, see RNN_DEFAULT). kwargs go to
-    TabularQAgent, or become DQNConfig fields for the DQN variants.
+    with memory, see RNN_DEFAULT), and 'ppo' (PPOAgent). kwargs go to
+    TabularQAgent, or become DQNConfig / PPOConfig fields. PPO explores by
+    sampling its policy, so an `epsilon` schedule passed to it is ignored.
     """
     if name == "random":
         return RandomAgent(n_actions, seed=seed)
     if name == "tabular_q":
         return TabularQAgent(n_actions, seed=seed, **kwargs)
+    if name == "ppo":
+        kwargs.pop("epsilon", None)
+        return PPOAgent(obs_size, n_actions, PPOConfig(**kwargs), seed=seed)
     if name in DQN_NICKNAMES:
         kwargs["prioritized"] = name.startswith("dqn_per")
         kwargs["mistake_replay"] = name.endswith("_mistake")
@@ -689,5 +928,5 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
             for key, value in RNN_DEFAULT.items():
                 kwargs.setdefault(key, value)
         return DQNAgent(obs_size, n_actions, DQNConfig(**kwargs), seed=seed)
-    raise ValueError(f"unknown agent {name!r}; choose random, tabular_q or one of "
+    raise ValueError(f"unknown agent {name!r}; choose random, tabular_q, ppo or one of "
                      f"{', '.join(DQN_NICKNAMES)}")

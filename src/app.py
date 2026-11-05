@@ -59,8 +59,8 @@ def code_version() -> str:
 
 AGENT_CHOICES = [(f"{AGENT_LABELS[a]} ({fun.NICKNAMES[a]})", a)
                  for a in ("tabular_q", "dqn", "dqn_dueling", "dqn_nstep", "dqn_dueling_nstep",
-                           "dqn_cnn", "dqn_rnn", "dqn_per", "dqn_mistake", "dqn_per_mistake",
-                           "random")]
+                           "dqn_cnn", "dqn_rnn", "ppo", "dqn_per", "dqn_mistake",
+                           "dqn_per_mistake", "random")]
 PRESET_CHOICES = list(PRESETS)
 METRIC_CHOICES = [("Success rate", "success"), ("Path efficiency", "path_efficiency"),
                   ("Mistakes per episode", "mistakes"), ("Steps", "steps"),
@@ -74,7 +74,7 @@ BRUSHES = [("⬛ Wall", "wall"), ("⬜ Empty", "empty"), ("🟥 Hazard", "hazard
 MAX_EPISODES = {"random": 1000, "tabular_q": 2000, "dqn": 800, "dqn_per": 800,
                 "dqn_mistake": 800, "dqn_per_mistake": 800, "dqn_dueling": 800,
                 "dqn_nstep": 800, "dqn_dueling_nstep": 800, "dqn_cnn": 800,
-                "dqn_rnn": 800}
+                "dqn_rnn": 800, "ppo": 2000}
 
 
 # ---------------------------------------------------------------------------
@@ -159,9 +159,11 @@ def _status(trainer: Trainer, started: float, window: int = 25) -> str:
     success = float(np.mean([r["success"] for r in recent]))
     mistakes = float(np.mean([r["mistakes"] for r in recent]))
     name = trainer.config.agent
+    # PPO has no epsilon: it explores by sampling its own move probabilities
+    explore = "samples its moves" if name == "ppo" else f"ε {h[-1]['epsilon']:.2f}"
     return (f"**{fun.NICKNAMES[name]}** · episode **{trainer.episodes_done} / "
             f"{trainer.config.episodes}** · last {len(recent)}: success **{success:.2f}**, "
-            f"mistakes **{mistakes:.1f}**, ε {h[-1]['epsilon']:.2f} · "
+            f"mistakes **{mistakes:.1f}**, {explore} · "
             f"{time.time() - started:.0f}s\n\n> {fun.progress_quip(success, mistakes, len(h))}")
 
 
@@ -504,6 +506,9 @@ def policy_map_ui(state, target):
     else:
         note = ("A network answers for every cell, including ones it never visited, so "
                 "arrows far from where it trained are guesses, not knowledge.")
+        if agent_name == "ppo":
+            note += (" Arrows are its most likely move; while training it samples moves, so "
+                     "it does not always take them. Shading is its critic's value estimate.")
     if target == MY_MAZE and not trainer.config.layout_text:
         note += (" It never trained on your maze: follow the arrows from the start ring "
                  "to see whether its habits transfer, or watch it in **🎬 Watch it play**.")
@@ -677,8 +682,8 @@ result is the task's. Whether it actually helps is tested in the `shaping_speed`
 |---|---|---|
 """ + "\n".join(f"| {AGENT_LABELS[a]} | {fun.NICKNAMES[a]} | {fun.TAGLINES[a]} |"
                 for a in ("random", "tabular_q", "dqn", "dqn_dueling", "dqn_nstep",
-                          "dqn_dueling_nstep", "dqn_cnn", "dqn_rnn", "dqn_per", "dqn_mistake",
-                          "dqn_per_mistake")) + """
+                          "dqn_dueling_nstep", "dqn_cnn", "dqn_rnn", "ppo", "dqn_per",
+                          "dqn_mistake", "dqn_per_mistake")) + """
 
 ## Achievements
 
@@ -782,7 +787,7 @@ def build_app() -> gr.Blocks:
 
         with gr.Tab("🎬 Watch it play"):
             gr.Markdown("Records one **greedy** episode, then replays it step by step with the "
-                        "agent's Q-values for each move.")
+                        "agent's Q-values for each move (for PPO, its move probabilities).")
             with gr.Row():
                 layout_mode = gr.Radio(["Training layout", "Unseen layout", MY_MAZE],
                                        value="Training layout", label="Layout")

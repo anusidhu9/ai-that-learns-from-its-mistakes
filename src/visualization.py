@@ -20,7 +20,7 @@ from src.fun import event_line
 
 AGENT_ORDER = ("random", "tabular_q", "tabular_q_shaped", "dqn", "dqn_shaped", "dqn_dueling",
                "dqn_nstep", "dqn_dueling_nstep", "dqn_curriculum", "dqn_cnn", "dqn_rnn", "dqn_wide",
-               "dqn_per",
+               "ppo", "dqn_per",
                "dqn_mistake", "dqn_per_mistake", "dqn_5k", "dqn_mistake_5k", "dqn_10k")
 AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn_per": "DQN + PER",
                 "dqn_mistake": "DQN + mistakes", "dqn_per_mistake": "DQN + PER + mistakes",
@@ -32,7 +32,7 @@ AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn
                 "dqn_dueling": "Dueling DQN", "dqn_nstep": "DQN (3-step)",
                 "dqn_dueling_nstep": "Dueling DQN (3-step)",
                 "dqn_curriculum": "DQN + curriculum", "dqn_cnn": "DQN (CNN)",
-                "dqn_rnn": "DQN (GRU memory)", "dqn_wide": "DQN (wide MLP)"}
+                "dqn_rnn": "DQN (GRU memory)", "dqn_wide": "DQN (wide MLP)", "ppo": "PPO"}
 # Mistake-aware variants share their base algorithm's hue (no palette hue left
 # passes the colorblind checks beside orange and aqua) and add a second
 # encoding instead: dash-dot lines, square markers and hatched bars. Shaped
@@ -42,28 +42,31 @@ AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn
 # curriculum arm uses long-dash-dot lines, X markers and horizontal hatching;
 # the CNN arm long dashes, star markers and crossed hatching; the wide MLP
 # loose dots, pentagon markers and vertical hatching; the recurrent arm
-# dash-dot with short gaps, hexagon markers and circle hatching.
+# dash-dot with short gaps, hexagon markers and circle hatching. PPO, a
+# different algorithm family, gets its own hue (the purple of dqn_10k, which
+# never shares a chart with it) plus short dashes, left-triangle markers and
+# star hatching.
 AGENT_COLORS = {"random": "#8a8a85", "tabular_q": "#2a78d6", "dqn": "#eb6834", "dqn_per": "#1baf7a",
                 "dqn_mistake": "#eb6834", "dqn_per_mistake": "#1baf7a",
                 "dqn_5k": "#eb6834", "dqn_mistake_5k": "#eb6834", "dqn_10k": "#6250d6",
                 "tabular_q_shaped": "#2a78d6", "dqn_shaped": "#eb6834",
                 "dqn_dueling": "#eb6834", "dqn_nstep": "#eb6834", "dqn_dueling_nstep": "#eb6834",
                 "dqn_curriculum": "#eb6834", "dqn_cnn": "#eb6834", "dqn_wide": "#eb6834",
-                "dqn_rnn": "#eb6834"}
+                "dqn_rnn": "#eb6834", "ppo": "#6250d6"}
 AGENT_LINESTYLES = {"random": "--", "dqn_mistake": "-.", "dqn_per_mistake": "-.",
                     "dqn_mistake_5k": "-.", "tabular_q_shaped": ":", "dqn_shaped": ":",
                     "dqn_dueling": (0, (6, 2)), "dqn_nstep": (0, (1, 1)),
                     "dqn_dueling_nstep": (0, (6, 2, 1, 2, 1, 2)),
                     "dqn_curriculum": (0, (10, 3, 2, 3)), "dqn_cnn": (0, (12, 4)),
-                    "dqn_wide": (0, (1, 4)), "dqn_rnn": (0, (4, 1, 1, 1))}
+                    "dqn_wide": (0, (1, 4)), "dqn_rnn": (0, (4, 1, 1, 1)), "ppo": (0, (3, 2))}
 AGENT_MARKERS = {"dqn_mistake": "s", "dqn_per_mistake": "s", "dqn_mistake_5k": "s",
                  "tabular_q_shaped": "^", "dqn_shaped": "^", "dqn_dueling": "D",
                  "dqn_nstep": "v", "dqn_dueling_nstep": "P", "dqn_curriculum": "X",
-                 "dqn_cnn": "*", "dqn_wide": "p", "dqn_rnn": "h"}
+                 "dqn_cnn": "*", "dqn_wide": "p", "dqn_rnn": "h", "ppo": "<"}
 AGENT_HATCHES = {"dqn_mistake": "///", "dqn_per_mistake": "///", "dqn_mistake_5k": "///",
                  "tabular_q_shaped": "..", "dqn_shaped": "..", "dqn_dueling": "xx",
                  "dqn_nstep": "\\\\", "dqn_dueling_nstep": "++", "dqn_curriculum": "--",
-                 "dqn_cnn": "xxx", "dqn_wide": "||", "dqn_rnn": "oo"}
+                 "dqn_cnn": "xxx", "dqn_wide": "||", "dqn_rnn": "oo", "ppo": "**"}
 MISTAKE_TYPES = ("collision", "revisit", "hazard", "timeout")
 MISTAKE_COLORS = {"collision": "#e87ba4", "revisit": "#6250d6", "hazard": "#e34948",
                   "timeout": "#eda100"}
@@ -198,12 +201,13 @@ def policy_map(env: GridWorld, agent) -> Optional[dict]:
     """The agent's greedy choice on every open cell of env's current layout.
 
     Returns arrays shaped like the grid: `action` (-1 where there is no
-    arrow), `value` (best Q-value, NaN where not shown), `seen` (False for
-    states a tabular agent never visited: its zeros there are not knowledge)
-    and `tie` (several actions share the best value, so greedy play picks
-    one at random). None for agents without Q-values (random).
+    arrow), `value` (best Q-value, or for a policy agent such as PPO the
+    critic's V(s); NaN where not shown), `seen` (False for states a tabular
+    agent never visited: its zeros there are not knowledge) and `tie`
+    (several actions share the best value or probability, so greedy play
+    picks one at random). None for agents without Q-values or a policy (random).
     """
-    if not hasattr(agent, "q_values"):
+    if not hasattr(agent, "q_values") and not hasattr(agent, "policy_probs"):
         return None
     shape = env.grid.shape
     out = {"action": np.full(shape, -1), "value": np.full(shape, np.nan),
@@ -213,10 +217,14 @@ def policy_map(env: GridWorld, agent) -> Optional[dict]:
         obs = env.observation_at((r, c))
         if isinstance(table, dict) and agent.key(obs) not in table:
             continue
-        q = np.asarray(agent.q_values(obs), dtype=float)
+        if hasattr(agent, "q_values"):
+            q = np.asarray(agent.q_values(obs), dtype=float)
+            out["value"][r, c] = q.max()
+        else:  # policy agent: arrows from pi, shading from the critic
+            q = np.asarray(agent.policy_probs(obs), dtype=float)
+            out["value"][r, c] = agent.state_value(obs)
         best = q.max()
         out["seen"][r, c] = True
-        out["value"][r, c] = best
         out["tie"][r, c] = np.count_nonzero(q >= best - TIE_TOL) > 1
         out["action"][r, c] = int(np.argmax(q))
     return out
@@ -228,7 +236,7 @@ def policy_map_figure(env: GridWorld, agent, title: str = "") -> Figure:
     ax = axes[0, 0]
     pm = policy_map(env, agent)
     if pm is None:
-        _empty(ax, "This agent has no Q-values, so it has no policy to draw")
+        _empty(ax, "This agent has no Q-values or policy, so there is nothing to draw")
         return fig
     draw_grid(ax, env.grid, start=env.start, title=title or "What the agent would do on each cell")
     value = np.ma.masked_invalid(pm["value"])
@@ -238,7 +246,8 @@ def policy_map_figure(env: GridWorld, agent, title: str = "") -> Figure:
         hi = hi if hi > lo else lo + 1e-6
         image = ax.imshow(value, cmap=HEAT_CMAP, vmin=lo, vmax=hi, interpolation="nearest")
         bar = fig.colorbar(image, ax=ax, shrink=0.75, pad=0.02)
-        bar.set_label("best Q-value (darker = agent expects more reward)", color=MUTED, fontsize=8)
+        label = "best Q-value" if hasattr(agent, "q_values") else "critic's value V(s)"
+        bar.set_label(f"{label} (darker = agent expects more reward)", color=MUTED, fontsize=8)
         bar.ax.tick_params(labelsize=8, colors=MUTED)
         bar.outline.set_visible(False)
         mid = (lo + hi) / 2
@@ -505,6 +514,21 @@ def experiment_bars_figure(summary: List[dict], metric: str = "success") -> Figu
 # Step-by-step replays
 # ---------------------------------------------------------------------------
 
+def _score_kind(agent) -> Optional[str]:
+    """What a replay shows beside the maze: 'q' (Q-values), 'probs' (a policy
+    agent's move probabilities) or None (random)."""
+    if hasattr(agent, "q_values"):
+        return "q"
+    return "probs" if hasattr(agent, "policy_probs") else None
+
+
+def _action_scores(agent, obs) -> Optional[list]:
+    kind = _score_kind(agent)
+    if kind == "q":
+        return agent.q_values(obs).tolist()
+    return agent.policy_probs(obs).tolist() if kind == "probs" else None
+
+
 def record_episode(env: GridWorld, agent, layout_seed: Optional[int] = None,
                    seed: int = 0) -> List[dict]:
     """Play one greedy episode and record every step for replay.
@@ -512,7 +536,8 @@ def record_episode(env: GridWorld, agent, layout_seed: Optional[int] = None,
     Like evaluation, this swaps in a seeded tie-breaking generator and
     restores the agent's own afterwards, so recording never changes training.
     Frame 0 is the start state; each later frame holds the action taken, the
-    reward, the events, the agent's Q-values for the state it acted in, and a
+    reward, the events, the agent's Q-values for the state it acted in (a
+    policy agent's move probabilities, marked "scores": "probs"), and a
     commentary line.
     """
     original_rng = agent.rng
@@ -522,12 +547,11 @@ def record_episode(env: GridWorld, agent, layout_seed: Optional[int] = None,
         if hasattr(agent, "begin_episode"):
             agent.begin_episode()
         frames = [{"step": 0, "pos": env.pos, "action": None, "reward": 0.0, "total": 0.0,
-                   "events": [], "q_values": agent.q_values(obs).tolist()
-                   if hasattr(agent, "q_values") else None,
-                   "line": "Ready. The maze awaits."}]
+                   "events": [], "q_values": _action_scores(agent, obs),
+                   "scores": _score_kind(agent), "line": "Ready. The maze awaits."}]
         total, done, info = 0.0, False, {}
         while not done:
-            q = agent.q_values(obs).tolist() if hasattr(agent, "q_values") else None
+            q = _action_scores(agent, obs)
             action = agent.act(obs, greedy=True)
             obs, reward, terminated, truncated, info = env.step(action)
             total += reward
@@ -536,7 +560,7 @@ def record_episode(env: GridWorld, agent, layout_seed: Optional[int] = None,
                 or f"Moved {ACTION_NAMES[action]}."
             frames.append({"step": env.steps, "pos": env.pos, "action": ACTION_NAMES[action],
                            "reward": reward, "total": total, "events": list(info["events"]),
-                           "q_values": q, "line": line})
+                           "q_values": q, "scores": _score_kind(agent), "line": line})
         frames[-1]["episode"] = info.get("episode")
     finally:
         agent.rng = original_rng
@@ -567,21 +591,27 @@ def frame_figure(env: GridWorld, frames: List[dict], index: int,
     elif q is None:
         _empty(ax_q, "This agent has no Q-values")
     else:
+        probs = frames[index + 1].get("scores") == "probs"
         q = np.asarray(q, dtype=float)
         best = int(np.argmax(q))
         colors = [LATE_COLOR if i == best else EARLY_COLOR for i in range(len(q))]
         y = np.arange(len(q))
         ax_q.barh(y, q, color=colors, height=0.6)
         for yi, value in enumerate(q):
-            ax_q.text(value, yi, f" {value:+.3f} ", va="center", fontsize=9, color=INK,
+            text = f" {value:.2f} " if probs else f" {value:+.3f} "
+            ax_q.text(value, yi, text, va="center", fontsize=9, color=INK,
                       ha="left" if value >= 0 else "right")
         ax_q.axvline(0, color=MUTED, linewidth=1)
         ax_q.set_yticks(y, ACTION_NAMES)
         ax_q.invert_yaxis()
         ax_q.grid(axis="y", visible=False)
-        span = max(abs(q).max(), 1e-6)
-        ax_q.set_xlim(min(q.min(), 0) - 0.35 * span, max(q.max(), 0) + 0.35 * span)
-        _title(ax_q, "Q-values at this cell\n(dark = chosen action)")
+        if probs:
+            ax_q.set_xlim(0, 1.25)
+            _title(ax_q, "Move probabilities at this cell\n(dark = chosen action)")
+        else:
+            span = max(abs(q).max(), 1e-6)
+            ax_q.set_xlim(min(q.min(), 0) - 0.35 * span, max(q.max(), 0) + 0.35 * span)
+            _title(ax_q, "Q-values at this cell\n(dark = chosen action)")
     return fig
 
 
@@ -637,6 +667,9 @@ def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int
     rnn = load_experiment(results_dir / "rnn_generalization")
     save(experiment_curves_figure(rnn["curves"], "success"), "rnn_curves.png")
     save(experiment_bars_figure(rnn["summary"], "success"), "rnn_success.png")
+    ppo = load_experiment(results_dir / "ppo_generalization")
+    save(experiment_curves_figure(ppo["curves"], "success"), "ppo_curves.png")
+    save(experiment_bars_figure(ppo["summary"], "success"), "ppo_success.png")
 
     trainer = Trainer(TrainConfig(env_preset="maze", agent="tabular_q", episodes=400, seed=seed,
                                   agent_kwargs={"epsilon": {"decay_episodes": 300}}))

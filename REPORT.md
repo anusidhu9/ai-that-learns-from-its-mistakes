@@ -2,7 +2,7 @@
 
 ## 1. Summary
 
-This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, DQN with an explicit memory of its mistakes was tested in two more, potential-based reward shaping in two pre-registered experiments, dueling heads and 3-step returns for DQN in two more, an easiest-first training curriculum in one more, a convolutional Q-network in one more, and a recurrent Q-network with memory in one more, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
+This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, DQN with an explicit memory of its mistakes was tested in two more, potential-based reward shaping in two pre-registered experiments, dueling heads and 3-step returns for DQN in two more, an easiest-first training curriculum in one more, a convolutional Q-network in one more, a recurrent Q-network with memory in one more, and PPO, a policy-gradient algorithm, against DQN in one more, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
 
 Main findings:
 
@@ -17,6 +17,7 @@ Main findings:
 9. **Training on easy mazes first made DQN learn more slowly.** With the same 50 training mazes in easiest-first order, DQN's learning speed was 0.722 against 0.851 for uniform order (pre-registered, Holm-corrected p = 0.0003, behind in all 10 seeds). On 50 held-out mazes it reached the goal in 49% against 57% (behind in 8 of 10 seeds, p = 0.093): no evidence of a difference (Section 6.10).
 10. **A convolutional network did not help DQN on new mazes.** With two 3×3 convolutions over the 5×5 view, DQN reached the goal on 27% of 50 held-out mazes against 33% with the standard network, and learned its training mazes no faster (0.617 vs 0.639; pre-registered, Holm-corrected p = 0.55 for both): no evidence of a difference. In an exploratory comparison, a plain network of the same size as the CNN did best (47% held-out, p = 0.019 against the standard network, uncorrected); a pre-registered retest did not replicate it (Section 6.12).
 11. **A memory made DQN far better on new mazes.** With a GRU that carries a memory through the episode, DQN reached the goal on 73% of 50 held-out mazes against 29% with the standard network (pre-registered, Holm-corrected p = 0.0004, ahead in all 10 seeds) and revisited cells less than half as often per episode (20.1 vs 44.1, p = 0.0004). A plain network of the same size reached 34%, so the gain is not a matter of size; whether it comes from the memory itself or from the recurrent network's training on 16-step runs was not separated. It is the first change in this project to improve success on mazes the agent had never seen (Section 6.12).
+12. **PPO generalised slightly better than DQN but learned more slowly.** With standard settings for both, PPO reached the goal on 69% of 50 held-out mazes against 64% for DQN (pre-registered, Holm-corrected p = 0.037, ahead in 8 of 10 seeds), all of it on the longer mazes, but learned its training mazes more slowly (learning speed 0.83 vs 0.90, p = 0.0003, behind in all 10 seeds). In an exploratory test, letting PPO sample its moves instead of always taking the most likely one raised its held-out success to 90%: most of its greedy failures were loops (Section 6.13).
 
 ## 2. Question and approach
 
@@ -101,6 +102,16 @@ DQN's `train_freq` and `target_update` were tuned on the fixed maze during devel
 **Convolutional DQN** (`dqn_cnn`). The observation's image part (here the 5×5 local view, as wall, hazard and goal channels) passes through two 3×3 convolutions (16 and 32 channels, padding 1, ReLU), so the same small filters are applied at every position. The flattened maps (800 values) and the two goal-direction values feed one hidden layer of 128: 108,388 weights against 27,012 for the standard MLP. The image shape is read from the environment. With convolutions off (the default) networks are built exactly as before (same initial weights, tested). For the experiment in Section 6.11, `dqn_wide` is a plain DQN with two hidden layers of 288 (106,852 weights), about the CNN's size.
 
 **Recurrent DQN** (`dqn_rnn`). The observation passes through one layer of 128 (ReLU) and then a GRU with 128 memory units, whose output gives the four Q-values (109,572 weights, about the size of `dqn_wide`). The memory is cleared at the start of every episode (`begin_episode`) and carried from step to step during it, in training and in greedy play. Replay keeps steps in order and records where each episode starts and ends (`SequenceReplayBuffer`, as in DRQN; Hausknecht & Stone, 2015), and each update draws 32 runs of 16 consecutive steps, never crossing into another episode. Before each run, up to 16 earlier steps of the same episode are fed through the network from a zero memory to rebuild it and are not trained on (burn-in, as in R2D2; Kapturowski et al., 2019). Targets use Double DQN step by step, with the target network's own memory. One update therefore trains on up to 512 steps against 64 for the MLPs. Sequence length, burn-in and sizes were fixed in advance and not tuned. A recurrent agent refuses PER, mistake replay, n-step returns, dueling heads and convolutions.
+
+**PPO** (`ppo`; Schulman et al., 2017). A different family: instead of action values it learns a policy π(a | s), the probability of each move, with an actor network (77 → 128 → 128 → 4, tanh, the same shape as DQN's) and a separate critic V(s) (77 → 128 → 128 → 1). It plays 2,048 steps with its current policy (episodes end and start inside this rollout), then learns from them and discards them; there is no replay buffer. Advantages use GAE (Schulman et al., 2016):
+
+```
+δ_t = r_t + γ V(s'_t) (1 − terminated_t) − V(s_t)
+A_t = δ_t + γ λ (1 − done_t) A_{t+1}
+L   = −mean min(ρ A, clip(ρ, 1 − 0.2, 1 + 0.2) A) + 0.5 · mean (V(s) − (A + V_old(s)))² − 0.01 · entropy
+```
+
+with ρ = π(a|s) / π_old(a|s), λ = 0.95, γ = 0.99. Each rollout is used for 4 passes in minibatches of 256 (Adam 3e-4, gradient clip 0.5, advantages normalised per minibatch, orthogonal initialisation). A timeout bootstraps from V(s'), as for DQN. PPO explores by sampling its policy, so it has no ε; greedy play takes the most likely move. These are the common published settings for small discrete tasks (as in CleanRL and Stable-Baselines3), fixed in advance and not tuned. A checkpoint also stores the half-collected rollout, so a resumed run reproduces an uninterrupted one exactly.
 
 ## 5. Evaluation protocol
 
@@ -392,6 +403,35 @@ Same maze, seeds 0–9, budget and evaluation as `hazard_maze`, comparing DQN an
 
 **Trained networks.** All 30 final networks are in [`results/rnn_generalization/models/`](results/rnn_generalization/models) (9.9 MB), each checked to reproduce its run's saved results exactly.
 
+### 6.13 PPO against DQN (`ppo_generalization`, 10 seeds, pre-registered)
+
+**Question.** Every learning agent so far estimates the value of each move. PPO learns the policy directly and learns only from the steps it has just played (Section 4). On the local-view task, does PPO (1) solve more held-out mazes and (2) learn its training mazes faster than DQN? The protocol ([`PROTOCOL.md`](results/ppo_generalization/PROTOCOL.md)) was written before any run. Full analysis: [`ANALYSIS.md`](results/ppo_generalization/ANALYSIS.md).
+
+**Design.**
+- **Two algorithms, each with its standard settings.** DQN exactly as in Sections 6.11–6.12 and PPO with the settings in Section 4, both with networks of two hidden layers of 128, on the same 50 fresh mazes (9700–9749) for 3,000 episodes. Neither was tuned.
+- **Held-out mazes.** 50 fresh layouts (9800–9849), none identical to a training maze or to each other (checked by a test).
+- **Seeds.** Fresh seeds 700–709.
+- **Primary endpoints**, Holm-corrected together. H1: held-out greedy success. H2: learning speed.
+- Before the protocol, a sanity check on an unrelated seed confirmed that PPO with these settings solves the fixed maze (shortest path from episode 500); it was not used to choose settings.
+
+| Hypothesis | DQN | PPO | Seeds ahead / tied / behind | p (Holm) | Verdict |
+|---|---|---|---|---|---|
+| H1: held-out success | 0.64 ± 0.04 | 0.69 ± 0.03 | 8 / 0 / 2 | 0.037 | **PPO better** |
+| H2: learning speed | 0.896 | 0.826 | 0 / 0 / 10 | 0.0003 | **PPO slower** |
+
+![Greedy success on training and held-out mazes, PPO study](docs/figures/ppo_success.png)
+
+- **Slower to learn, level at the end.** PPO was behind at every evaluation up to episode 2,500 (by 0.06–0.10, p ≤ 0.024) and level at 3,000 (0.93 vs 0.94, p = 0.63).
+- **Better on long new mazes only.** On the 25 held-out mazes with the minimum path length the two were level (0.85 vs 0.86); on the 25 longer ones PPO solved 0.54 against 0.43 (exploratory, p = 0.0065). PPO also timed out less and earned more task reward on held-out mazes (p ≤ 0.037, exploratory).
+- **Sampling instead of greedy play** (exploratory). Each final PPO network was also played on the held-out mazes sampling its moves from its policy. Success rose from 0.69 to 0.90 (every seed 0.88–0.92), revisits fell from 22.7 to 9.6 per episode and timeouts from 0.31 to 0.10. DQN was not evaluated with random moves, so this is not a comparison of the two algorithms.
+- **Cost.** A PPO run took about 2 minutes against 7 for DQN (two runs in parallel), about a quarter of the time.
+- **Baseline.** Plain DQN did much better here than in Sections 6.11 and 6.12 (held-out 0.64 against 0.33 and 0.29) on mazes of similar path length; the reason is not known.
+- **Deviations.** None in the run; `run.log` was regenerated in UTF-8 afterwards (outputs byte-identical).
+
+![Greedy success during training, PPO study](docs/figures/ppo_curves.png)
+
+**Trained networks.** All 20 final networks are in [`results/ppo_generalization/models/`](results/ppo_generalization/models) (3.3 MB), each checked to reproduce its run's saved results exactly.
+
 ## 7. Discussion
 
 **Did the agents learn from their mistakes?** Yes, on every fixed layout, and the logs show how. Mistakes concentrated in specific places early in training (the corridor below the start), the corresponding penalties dominated the reward, and both disappeared as Q-values for the offending actions fell. The early-versus-late comparison, the mistake hotspots and the reward breakdown all point the same way, and greedy evaluation confirms it with exploration off.
@@ -419,6 +459,8 @@ Same maze, seeds 0–9, budget and evaluation as `hazard_maze`, comparing DQN an
 
 **Memory.** Every change before Stage F altered how the agent learns, what it practises or how it processes one observation, and none improved success on new mazes. A memory changes what the agent can know: whether it has been somewhere before, which a 5×5 window cannot show. It raised held-out success from 0.29 to 0.73 and nearly solved the training mazes, the largest effect in this project, in every seed. This supports the explanation offered after Stages C–E that the limit was what the agent could see and represent, specifically its lack of memory, rather than how fast it learned. Two qualifications. First, the recurrent arm was also trained differently: on 16-step runs, so each update covered up to 8× as many steps. An MLP given the same number of steps per update, or a GRU whose memory is cleared at every step, would separate the two. Second, nothing here shows what the memory stores. Revisits per step fell only modestly, so the network is not simply avoiding cells it has visited; it may track direction or progress instead. These are the obvious next tests.
 
+**Value learning and policy learning.** PPO (Section 6.13) learned the training mazes more slowly than DQN, which reuses every step many times from its replay buffer, but generalised slightly better, entirely on the longer mazes. The held-out difference is small and only just significant after correction, so it needs replicating. The larger lesson is about evaluation. Sampling from PPO's own policy instead of always taking its most likely move raised held-out success from 0.69 to 0.90. A deterministic agent that cannot tell two places apart through a 5×5 window makes the same move in both and can loop until it times out; a stochastic one eventually takes another move and escapes. That is the same problem Stage F's memory addressed from the other side. Greedy evaluation, used for every result in this report, therefore understates what a stochastic policy can do on this task. It does not show that PPO beats DQN by that margin: DQN was not evaluated with random moves, and a little randomness might rescue it too.
+
 ## 8. Problems found and fixed during development
 
 These are reported because each would have changed the conclusions.
@@ -435,12 +477,12 @@ These are reported because each would have changed the conclusions.
 
 - **Small tasks.** 8×8 and 9×9 grids with 100-step episodes, chosen to fit a free CPU. The ranking of algorithms may change on larger problems.
 - **Few seeds.** Five per agent for three of the five experiments can show large effects only. Extending `hazard_maze` and `generalization` to 10 seeds turned two "not established" differences into established ones; the remaining open questions (PER, how often DQN collapses) might be settled the same way.
-- **Limited tuning.** One hyperparameter setting per algorithm, one shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule, one CNN architecture (not tuned; it used the MLP's learning rate) and one recurrent setting (GRU 128, runs of 16 steps, burn-in 16). DQN's update frequency and target-update interval were chosen from four settings on the fixed maze; tabular Q-learning was not tuned at all. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); a smaller share, or a task where mistakes are rare, might behave differently, but tuning it on the seeds already examined would mean tuning on the test set.
+- **Limited tuning.** One hyperparameter setting per algorithm, one shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule, one CNN architecture (not tuned; it used the MLP's learning rate) one recurrent setting (GRU 128, runs of 16 steps, burn-in 16) and one set of standard PPO settings. DQN's update frequency and target-update interval were chosen from four settings on the fixed maze; tabular Q-learning was not tuned at all. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); a smaller share, or a task where mistakes are rare, might behave differently, but tuning it on the seeds already examined would mean tuning on the test set.
 - **Fixed training budgets.** Tabular Q-learning was still improving at the end of the generalization runs.
 - **Non-Markovian revisit penalty**, as described in Section 3.
 - **Statistics.** t-intervals on 5–10 bounded values are approximate; the charts clip them to the possible range.
 - **Duplicate mazes.** Small mazes can repeat across layout seeds. Two held-out sets each contained one training maze (Section 6.10); this did not change any conclusion, and later experiments are checked for it.
-- **Held-out success varies between studies.** Plain DQN reached 0.48, 0.36, 0.57, 0.33 and 0.29 on the held-out sets of Sections 6.8–6.12, with similar shares of short mazes. Only comparisons within one study are meaningful.
+- **Held-out success varies between studies.** Plain DQN reached 0.48, 0.36, 0.57, 0.33, 0.29 and 0.64 on the held-out sets of Sections 6.8–6.13, with similar shares of short mazes. Only comparisons within one study are meaningful.
 
 ## 10. Reproducibility
 
@@ -460,11 +502,12 @@ python -m src.evaluation --experiment dqn_variants_generalization --workers 4
 python -m src.evaluation --experiment curriculum_generalization --workers 4
 python -m src.evaluation --experiment cnn_generalization --workers 2
 python -m src.evaluation --experiment rnn_generalization --workers 2   # about 11 hours on a laptop
+python -m src.evaluation --experiment ppo_generalization --workers 2   # about 45 minutes
 python -m src.visualization                             # regenerates docs/figures from results/
-python -m pytest -q                                     # 284 tests
+python -m pytest -q                                     # 300 tests
 ```
 
-The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. The two mistake-replay experiments add `buffer_diagnostics.csv` (how much each replay buffer forgot) and `ANALYSIS.md`; `long_memory_mistakes` also has `PROTOCOL.md` and its pilot in `pilot/`. The two shaping experiments have `ANALYSIS.md`, and their shared `PROTOCOL.md` is in `results/shaping_speed/`; likewise the two DQN-variant experiments, with the protocol in `results/dqn_variants_speed/`. `curriculum_generalization`, `cnn_generalization` and `rnn_generalization` each have their own `PROTOCOL.md` and `ANALYSIS.md`; the last two also keep every run's trained network in `models/`. `--workers N` trains N runs at a time; runs are independent and seeded, so results are the same as with one worker (tested). Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
+The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. The two mistake-replay experiments add `buffer_diagnostics.csv` (how much each replay buffer forgot) and `ANALYSIS.md`; `long_memory_mistakes` also has `PROTOCOL.md` and its pilot in `pilot/`. The two shaping experiments have `ANALYSIS.md`, and their shared `PROTOCOL.md` is in `results/shaping_speed/`; likewise the two DQN-variant experiments, with the protocol in `results/dqn_variants_speed/`. `curriculum_generalization`, `cnn_generalization`, `rnn_generalization` and `ppo_generalization` each have their own `PROTOCOL.md` and `ANALYSIS.md`; the last three also keep every run's trained network in `models/`. `--workers N` trains N runs at a time; runs are independent and seeded, so results are the same as with one worker (tested). Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
 
 Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.14.1 (CPU), NumPy 2.4.6, Matplotlib 3.11.2, pandas 3.0.6 and Gradio 6.30.0. Exact reproduction is guaranteed for the same software on the same machine. Other platforms should give statistically similar but not bit-identical numbers, because floating-point results can differ between builds.
 
@@ -478,6 +521,8 @@ Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.1
 - A reward variant without per-step penalties, to separate "mistakes" from reward design.
 - Separating memory from sequence replay (Section 6.12): an MLP trained on as many steps per update as the GRU network, and a GRU whose memory is cleared at every step, against the GRU network, pre-registered with fresh seeds and layouts.
 - What the GRU's memory stores (visited cells, direction, time), for example by probing its memory units, and whether memory also helps on the hazard mazes and larger grids.
+- Stochastic evaluation for every agent (PPO sampling its policy, DQN with a small ε), pre-registered, to separate "knows the way" from "escapes loops by chance" (Section 6.13), and a replication of PPO's small held-out advantage with fresh seeds.
+- A recurrent PPO, combining a policy learner with Stage F's memory.
 - A curriculum over maze size, or one that advances on success rather than on a fixed schedule, tested against a control with the same number of episodes on each maze.
 - Reward shaping with more seeds or more held-out mazes, to detect a generalization effect as small as +0.06 if there is one, and a hint the local-view agent can observe.
 - Hosting the dashboard permanently (for example, on Hugging Face Spaces).
@@ -492,5 +537,7 @@ Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.1
 - Schaul, T., Quan, J., Antonoglou, I., & Silver, D. (2016). Prioritized experience replay. *ICLR*.
 - Hausknecht, M., & Stone, P. (2015). Deep recurrent Q-learning for partially observable MDPs. *AAAI Fall Symposium on Sequential Decision Making for Intelligent Agents*.
 - Kapturowski, S., Ostrovski, G., Quan, J., Munos, R., & Dabney, W. (2019). Recurrent experience replay in distributed reinforcement learning. *ICLR*.
+- Schulman, J., Moritz, P., Levine, S., Jordan, M., & Abbeel, P. (2016). High-dimensional continuous control using generalized advantage estimation. *ICLR*.
+- Schulman, J., Wolski, F., Dhariwal, P., Radford, A., & Klimov, O. (2017). Proximal policy optimization algorithms. *arXiv:1707.06347*.
 - Ng, A. Y., Harada, D., & Russell, S. (1999). Policy invariance under reward transformations: Theory and application to reward shaping. *ICML*.
 - Sutton, R. S., & Barto, A. G. (2018). *Reinforcement Learning: An Introduction* (2nd ed.). MIT Press.
