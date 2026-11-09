@@ -2,7 +2,7 @@
 
 ## 1. Summary
 
-This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, DQN with an explicit memory of its mistakes was tested in two more, potential-based reward shaping in two pre-registered experiments, dueling heads and 3-step returns for DQN in two more, an easiest-first training curriculum in one more, a convolutional Q-network in one more, a recurrent Q-network with memory in one more, and PPO, a policy-gradient algorithm, against DQN in one more, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests.
+This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, DQN with an explicit memory of its mistakes was tested in two more, potential-based reward shaping in two pre-registered experiments, dueling heads and 3-step returns for DQN in two more, an easiest-first training curriculum in one more, a convolutional Q-network in one more, a recurrent Q-network with memory in one more, and PPO, a policy-gradient algorithm, against DQN in one more, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests. A final pre-registered study re-evaluated 80 of the trained networks, without further training, with a little randomness in their moves.
 
 Main findings:
 
@@ -18,6 +18,7 @@ Main findings:
 10. **A convolutional network did not help DQN on new mazes.** With two 3×3 convolutions over the 5×5 view, DQN reached the goal on 27% of 50 held-out mazes against 33% with the standard network, and learned its training mazes no faster (0.617 vs 0.639; pre-registered, Holm-corrected p = 0.55 for both): no evidence of a difference. In an exploratory comparison, a plain network of the same size as the CNN did best (47% held-out, p = 0.019 against the standard network, uncorrected); a pre-registered retest did not replicate it (Section 6.12).
 11. **A memory made DQN far better on new mazes.** With a GRU that carries a memory through the episode, DQN reached the goal on 73% of 50 held-out mazes against 29% with the standard network (pre-registered, Holm-corrected p = 0.0004, ahead in all 10 seeds) and revisited cells less than half as often per episode (20.1 vs 44.1, p = 0.0004). A plain network of the same size reached 34%, so the gain is not a matter of size; whether it comes from the memory itself or from the recurrent network's training on 16-step runs was not separated. It is the first change in this project to improve success on mazes the agent had never seen (Section 6.12).
 12. **PPO generalised slightly better than DQN but learned more slowly.** With standard settings for both, PPO reached the goal on 69% of 50 held-out mazes against 64% for DQN (pre-registered, Holm-corrected p = 0.037, ahead in 8 of 10 seeds), all of it on the longer mazes, but learned its training mazes more slowly (learning speed 0.83 vs 0.90, p = 0.0003, behind in all 10 seeds). In an exploratory test, letting PPO sample its moves instead of always taking the most likely one raised its held-out success to 90%: most of its greedy failures were loops (Section 6.13).
+13. **Greedy evaluation understated every agent; the memory and PPO results survive randomness.** Re-evaluating 80 saved networks on their held-out mazes with one random move in twenty (ε = 0.05) raised plain DQN's success from 0.42 to 0.55, and every one of the 30 DQN networks improved (pre-registered, Holm-corrected p < 0.001). Every other network improved too: the random moves break loops that a deterministic policy with a 5×5 view falls into. With both allowed randomness, the GRU network still beat the plain one (0.80 vs 0.42) and PPO sampling its policy still beat DQN with ε = 0.05 (0.90 vs 0.71), with no overlap between seeds in either case (both p < 0.001). With the same ε for both, PPO's edge over DQN stayed small (0.75 vs 0.71, exploratory) (Section 6.14).
 
 ## 2. Question and approach
 
@@ -115,7 +116,7 @@ with ρ = π(a|s) / π_old(a|s), λ = 0.95, γ = 0.99. Each rollout is used for 
 
 ## 5. Evaluation protocol
 
-- **Greedy evaluation.** Every reported result is measured with exploration switched off, using a separate environment and a separately seeded tie-breaking generator that is restored afterwards, so evaluation never changes training (tested).
+- **Greedy evaluation.** Every reported result is measured with exploration switched off, using a separate environment and a separately seeded tie-breaking generator that is restored afterwards, so evaluation never changes training (tested). Section 6.14 additionally re-evaluates saved networks with random moves (ε-greedy, or PPO sampling its policy); every other result is greedy.
 - **When.** Before training (episode 0), every 50 episodes (every 500 for generalization), and at the end.
 - **What.** On a fixed layout, 10 greedy episodes; with a layout pool, one episode on each of the 50 training layouts; for generalization, also one episode on each of 50 held-out layouts (seeds 1000–1049) never used in training.
 - **Metrics.** Success rate; path efficiency (optimal length ÷ steps, for successful episodes that touched no hazard, otherwise 0); steps; mistakes by type; total reward. The two mistake-replay experiments also report steps to goal (mean steps of successful episodes only, so failures do not count as 100) and hazard rate (share of episodes that touched a hazard).
@@ -432,6 +433,43 @@ Same maze, seeds 0–9, budget and evaluation as `hazard_maze`, comparing DQN an
 
 **Trained networks.** All 20 final networks are in [`results/ppo_generalization/models/`](results/ppo_generalization/models) (3.3 MB), each checked to reproduce its run's saved results exactly.
 
+### 6.14 Stochastic evaluation of saved networks (`stochastic_evaluation`, 80 networks, pre-registered)
+
+**Question.** Every result above is greedy. Section 6.13 found that PPO solved far more held-out mazes when it sampled its moves, but DQN had never been evaluated with any randomness. Without further training: (1) does a little randomness (ε = 0.05, the rate DQN ended training with) change plain DQN's held-out success; (2) with each allowed its own randomness, does PPO (sampled) still beat DQN (ε = 0.05); (3) does the memory result of Section 6.12 hold when both networks play with ε = 0.05? The protocol ([`PROTOCOL.md`](results/stochastic_evaluation/PROTOCOL.md)) and the analysis script were written before any stochastic evaluation. Full analysis: [`ANALYSIS.md`](results/stochastic_evaluation/ANALYSIS.md).
+
+**Design.**
+- **Networks.** The 80 saved final networks of Sections 6.11–6.13 (8 arms × 10 seeds), each played on its own study's 50 held-out mazes. Nothing is trained or changed.
+- **Modes.** Greedy (one pass, the original evaluation seed: it reproduced every saved result exactly, which the runner checks); ε-greedy with ε = 0.05, 0.1 and 0.2 (the best move, replaced by a uniformly random one with probability ε); and, for PPO, moves sampled from the policy. Each stochastic mode makes 5 passes over the 50 mazes with a new evaluation seed (20,000 + run seed). The recurrent network sees every observation, random moves included.
+- **Primary endpoints**, Holm-corrected together. H1: plain DQN ε 0.05 vs greedy over the 30 DQN networks of the three studies (paired sign-flip permutation test). H2: PPO sampled vs DQN ε 0.05 (Section 6.13 networks). H3: GRU vs MLP, both ε 0.05 (Section 6.12 networks).
+- PPO's sampled success had already been measured once (Section 6.13), so that side of H2 was not blind.
+
+| Hypothesis | Compared | Means | Networks ahead | p (Holm) | Verdict |
+|---|---|---|---|---|---|
+| H1: randomness for DQN | ε 0.05 vs greedy | 0.55 vs 0.42 | 30 of 30 | < 0.001 | **ε 0.05 better** |
+| H2: PPO vs DQN, own randomness | PPO sampled vs DQN ε 0.05 | 0.90 vs 0.71 | no overlap | < 0.001 | **PPO better** |
+| H3: memory under randomness | GRU vs MLP, both ε 0.05 | 0.80 vs 0.42 | no overlap | < 0.001 | **GRU better** |
+
+![Held-out success of the same networks in each evaluation mode](docs/figures/stochastic_success.png)
+
+| Section | Arm | Greedy | ε 0.05 | ε 0.1 | ε 0.2 | Sampled |
+|---|---|---|---|---|---|---|
+| 6.11 | DQN | 0.33 | 0.52 | 0.59 | 0.70 | — |
+| 6.11 | DQN (CNN) | 0.27 | 0.43 | 0.51 | 0.63 | — |
+| 6.11 | DQN (wide MLP) | 0.47 | 0.61 | 0.67 | 0.74 | — |
+| 6.12 | DQN | 0.29 | 0.42 | 0.51 | 0.59 | — |
+| 6.12 | DQN (GRU memory) | 0.73 | 0.80 | 0.82 | 0.84 | — |
+| 6.12 | DQN (wide MLP) | 0.34 | 0.46 | 0.52 | 0.61 | — |
+| 6.13 | DQN | 0.64 | 0.71 | 0.78 | 0.82 | — |
+| 6.13 | PPO | 0.69 | 0.75 | 0.80 | 0.83 | 0.90 |
+
+All exploratory, uncorrected:
+- **Every network improved, at every ε.** All 8 arms gained over greedy at ε 0.05, 0.1 and 0.2 on all 10 of their networks, and success was still rising at 0.2, so the best ε lies outside the range tested.
+- **Random moves rescue failures without breaking successes.** On mazes a network solved greedily it still solved 99–100% of the ε 0.05 episodes; on mazes it had timed out on greedily it now solved 18–28%.
+- **Agents that loop more gain more.** Plain MLPs gained 0.12–0.18 at ε 0.05; the GRU (+0.07) and PPO (+0.06), which already looped less, gained least, and their paths became longer at ε 0.2 (path efficiency 0.68 → 0.60 and 0.68 → 0.61).
+- **Earlier comparisons hold.** CNN vs MLP: no evidence of a difference under either mode (p = 0.27 greedy, 0.13 at ε 0.05). Wide vs plain MLP: still a difference in the Stage E networks (p = 0.041 at ε 0.05) and still none in Stage F (p = 0.27). PPO vs DQN with the same ε 0.05: 0.75 vs 0.71 (p = 0.025), about the same small gap as greedily.
+- **Sampling suits PPO better than ε.** Sampled play reached 0.90 with fewer steps, collisions and revisits than PPO with ε 0.05 (0.75) or even ε 0.2 (0.83).
+- **Cost.** 66,500 evaluation episodes took 13 minutes with two workers.
+
 ## 7. Discussion
 
 **Did the agents learn from their mistakes?** Yes, on every fixed layout, and the logs show how. Mistakes concentrated in specific places early in training (the corridor below the start), the corresponding penalties dominated the reward, and both disappeared as Q-values for the offending actions fell. The early-versus-late comparison, the mistake hotspots and the reward breakdown all point the same way, and greedy evaluation confirms it with exploration off.
@@ -459,7 +497,9 @@ Same maze, seeds 0–9, budget and evaluation as `hazard_maze`, comparing DQN an
 
 **Memory.** Every change before Stage F altered how the agent learns, what it practises or how it processes one observation, and none improved success on new mazes. A memory changes what the agent can know: whether it has been somewhere before, which a 5×5 window cannot show. It raised held-out success from 0.29 to 0.73 and nearly solved the training mazes, the largest effect in this project, in every seed. This supports the explanation offered after Stages C–E that the limit was what the agent could see and represent, specifically its lack of memory, rather than how fast it learned. Two qualifications. First, the recurrent arm was also trained differently: on 16-step runs, so each update covered up to 8× as many steps. An MLP given the same number of steps per update, or a GRU whose memory is cleared at every step, would separate the two. Second, nothing here shows what the memory stores. Revisits per step fell only modestly, so the network is not simply avoiding cells it has visited; it may track direction or progress instead. These are the obvious next tests.
 
-**Value learning and policy learning.** PPO (Section 6.13) learned the training mazes more slowly than DQN, which reuses every step many times from its replay buffer, but generalised slightly better, entirely on the longer mazes. The held-out difference is small and only just significant after correction, so it needs replicating. The larger lesson is about evaluation. Sampling from PPO's own policy instead of always taking its most likely move raised held-out success from 0.69 to 0.90. A deterministic agent that cannot tell two places apart through a 5×5 window makes the same move in both and can loop until it times out; a stochastic one eventually takes another move and escapes. That is the same problem Stage F's memory addressed from the other side. Greedy evaluation, used for every result in this report, therefore understates what a stochastic policy can do on this task. It does not show that PPO beats DQN by that margin: DQN was not evaluated with random moves, and a little randomness might rescue it too.
+**Value learning and policy learning.** PPO (Section 6.13) learned the training mazes more slowly than DQN, which reuses every step many times from its replay buffer, but generalised slightly better, entirely on the longer mazes. The held-out difference is small and only just significant after correction, so it needs replicating. The larger lesson is about evaluation. Sampling from PPO's own policy instead of always taking its most likely move raised held-out success from 0.69 to 0.90. A deterministic agent that cannot tell two places apart through a 5×5 window makes the same move in both and can loop until it times out; a stochastic one eventually takes another move and escapes. That is the same problem Stage F's memory addressed from the other side. Greedy evaluation, used for every result in this report, therefore understates what a stochastic policy can do on this task. Section 6.14 tested whether that margin was about PPO or about randomness: it was mostly randomness. With one random move in twenty, DQN rose from 0.64 to 0.71 and PPO from 0.69 to 0.75, about the same small gap as greedily. PPO's large advantage came from sampling its own policy, which places random choices where the network is unsure, rather than from a better network for the same kind of play.
+
+**How agents are evaluated.** Section 6.14 shows that greedy evaluation understated every network in this project, and the agents with the most loops most: a little randomness raised plain DQN's held-out success by 0.07–0.18 in every study, and never broke a maze that greedy play solved. The greedy numbers are a fair basis for comparing arms within a study, and they remain the pre-registered measure, but they are a lower bound on what the networks can do on new mazes. The qualitative conclusions did not change under randomness: memory still made by far the largest difference (0.80 vs 0.42), the CNN still did not help, and the wide-network hint still did not replicate. What did change is the interpretation of loops. A large share of held-out failures were loops that a single random move escapes, which is exactly the failure a memory or a stochastic policy avoids by design.
 
 ## 8. Problems found and fixed during development
 
@@ -482,6 +522,7 @@ These are reported because each would have changed the conclusions.
 - **Non-Markovian revisit penalty**, as described in Section 3.
 - **Statistics.** t-intervals on 5–10 bounded values are approximate; the charts clip them to the possible range.
 - **Duplicate mazes.** Small mazes can repeat across layout seeds. Two held-out sets each contained one training maze (Section 6.10); this did not change any conclusion, and later experiments are checked for it.
+- **Greedy evaluation is a lower bound.** Every result except Section 6.14 is greedy, and a little randomness raised every network's held-out success (Section 6.14). Differences between arms are measured under the same mode, so they remain valid comparisons, but absolute success rates understate what the networks can do.
 - **Held-out success varies between studies.** Plain DQN reached 0.48, 0.36, 0.57, 0.33, 0.29 and 0.64 on the held-out sets of Sections 6.8–6.13, with similar shares of short mazes. Only comparisons within one study are meaningful.
 
 ## 10. Reproducibility
@@ -503,11 +544,12 @@ python -m src.evaluation --experiment curriculum_generalization --workers 4
 python -m src.evaluation --experiment cnn_generalization --workers 2
 python -m src.evaluation --experiment rnn_generalization --workers 2   # about 11 hours on a laptop
 python -m src.evaluation --experiment ppo_generalization --workers 2   # about 45 minutes
+python -m src.stochastic_study --out runs/experiments_stochastic --workers 2  # 13 minutes, no training
 python -m src.visualization                             # regenerates docs/figures from results/
-python -m pytest -q                                     # 300 tests
+python -m pytest -q                                     # 309 tests
 ```
 
-The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. The two mistake-replay experiments add `buffer_diagnostics.csv` (how much each replay buffer forgot) and `ANALYSIS.md`; `long_memory_mistakes` also has `PROTOCOL.md` and its pilot in `pilot/`. The two shaping experiments have `ANALYSIS.md`, and their shared `PROTOCOL.md` is in `results/shaping_speed/`; likewise the two DQN-variant experiments, with the protocol in `results/dqn_variants_speed/`. `curriculum_generalization`, `cnn_generalization`, `rnn_generalization` and `ppo_generalization` each have their own `PROTOCOL.md` and `ANALYSIS.md`; the last three also keep every run's trained network in `models/`. `--workers N` trains N runs at a time; runs are independent and seeded, so results are the same as with one worker (tested). Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
+The saved outputs in `results/<experiment>/` are `summary.csv` (mean and CI per agent), `results.csv` (per seed), `curves.csv` (greedy learning curves), `experiment.json` (exact settings) and `run.log`. The two mistake-replay experiments add `buffer_diagnostics.csv` (how much each replay buffer forgot) and `ANALYSIS.md`; `long_memory_mistakes` also has `PROTOCOL.md` and its pilot in `pilot/`. The two shaping experiments have `ANALYSIS.md`, and their shared `PROTOCOL.md` is in `results/shaping_speed/`; likewise the two DQN-variant experiments, with the protocol in `results/dqn_variants_speed/`. `curriculum_generalization`, `cnn_generalization`, `rnn_generalization` and `ppo_generalization` each have their own `PROTOCOL.md` and `ANALYSIS.md`; the last three also keep every run's trained network in `models/`. `stochastic_evaluation` re-evaluates those networks (no training) and has `PROTOCOL.md`, `analyze.py` (written before the run), `ANALYSIS.md`, `results.csv` (per network and mode) and `episodes.csv.gz` (every episode). `--workers N` trains N runs at a time; runs are independent and seeded, so results are the same as with one worker (tested). Experiments are resumable: an interrupted run continues from its last checkpoint when the same command is rerun. `hazard_maze` and `generalization` were extended to 10 seeds by training all their runs in parallel worker processes and aggregating them with the same runner; their original seeds (0–4 and 0–2) were retrained and reproduced the earlier results exactly.
 
 Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.14.1 (CPU), NumPy 2.4.6, Matplotlib 3.11.2, pandas 3.0.6 and Gradio 6.30.0. Exact reproduction is guaranteed for the same software on the same machine. Other platforms should give statistically similar but not bit-identical numbers, because floating-point results can differ between builds.
 
@@ -521,7 +563,7 @@ Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.1
 - A reward variant without per-step penalties, to separate "mistakes" from reward design.
 - Separating memory from sequence replay (Section 6.12): an MLP trained on as many steps per update as the GRU network, and a GRU whose memory is cleared at every step, against the GRU network, pre-registered with fresh seeds and layouts.
 - What the GRU's memory stores (visited cells, direction, time), for example by probing its memory units, and whether memory also helps on the hazard mazes and larger grids.
-- Stochastic evaluation for every agent (PPO sampling its policy, DQN with a small ε), pre-registered, to separate "knows the way" from "escapes loops by chance" (Section 6.13), and a replication of PPO's small held-out advantage with fresh seeds.
+- A replication of PPO's small held-out advantage with fresh seeds (Sections 6.13–6.14), and evaluation randomness for DQN that, like PPO's sampling, depends on how sure the network is (a softmax over Q-values), with its temperature chosen on training mazes only.
 - A recurrent PPO, combining a policy learner with Stage F's memory.
 - A curriculum over maze size, or one that advances on success rather than on a fixed schedule, tested against a control with the same number of episodes on each maze.
 - Reward shaping with more seeds or more held-out mazes, to detect a generalization effect as small as +0.06 if there is one, and a hint the local-view agent can observe.

@@ -1,0 +1,129 @@
+Primary (Holm over H1-H3), held-out success:
+H1 dqn eps0.05 vs greedy (30 networks, paired): 0.551 vs 0.422  diff +0.129  (CI of diff +/-0.023)  p 0.0000  higher/tied/lower 30/0/0
+H2 Stage I ppo sample vs dqn eps0.05: 0.904 vs 0.714  diff +0.190  p 0.0000
+H3 Stage F dqn_rnn eps0.05 vs dqn eps0.05: 0.795 vs 0.423  diff +0.372  p 0.0000
+Holm-adjusted (H1, H2, H3): [0.0, 0.0, 0.0]
+  H1 by study E: mean diff +0.182  higher/tied/lower 10/0/0
+  H1 by study F: mean diff +0.133  higher/tied/lower 10/0/0
+  H1 by study I: mean diff +0.072  higher/tied/lower 10/0/0
+
+Exploratory: success by mode (mean +/- 95% CI over seeds):
+  E dqn       greedy 0.334+/-0.082  eps0.05 0.516+/-0.072  eps0.1 0.594+/-0.068  eps0.2 0.698+/-0.055
+  E dqn_cnn   greedy 0.266+/-0.103  eps0.05 0.430+/-0.098  eps0.1 0.514+/-0.094  eps0.2 0.634+/-0.079
+  E dqn_wide  greedy 0.466+/-0.073  eps0.05 0.608+/-0.058  eps0.1 0.667+/-0.048  eps0.2 0.742+/-0.042
+  F dqn       greedy 0.290+/-0.070  eps0.05 0.423+/-0.054  eps0.1 0.506+/-0.035  eps0.2 0.588+/-0.032
+  F dqn_rnn   greedy 0.730+/-0.082  eps0.05 0.795+/-0.058  eps0.1 0.816+/-0.055  eps0.2 0.840+/-0.046
+  F dqn_wide  greedy 0.338+/-0.074  eps0.05 0.462+/-0.051  eps0.1 0.521+/-0.039  eps0.2 0.606+/-0.037
+  I dqn       greedy 0.642+/-0.041  eps0.05 0.714+/-0.027  eps0.1 0.777+/-0.027  eps0.2 0.824+/-0.019
+  I ppo       greedy 0.694+/-0.028  eps0.05 0.751+/-0.021  eps0.1 0.802+/-0.010  eps0.2 0.830+/-0.014  sample 0.904+/-0.011
+
+Exploratory: each arm, stochastic vs greedy (paired, uncorrected):
+  E dqn       eps0.05 vs greedy: 0.516 vs 0.334  diff +0.182  (CI of diff +/-0.026)  p 0.0020  higher/tied/lower 10/0/0
+  E dqn       eps0.1  vs greedy: 0.594 vs 0.334  diff +0.260  (CI of diff +/-0.033)  p 0.0020  higher/tied/lower 10/0/0
+  E dqn       eps0.2  vs greedy: 0.698 vs 0.334  diff +0.364  (CI of diff +/-0.043)  p 0.0020  higher/tied/lower 10/0/0
+  E dqn_cnn   eps0.05 vs greedy: 0.430 vs 0.266  diff +0.164  (CI of diff +/-0.026)  p 0.0020  higher/tied/lower 10/0/0
+  E dqn_cnn   eps0.1  vs greedy: 0.514 vs 0.266  diff +0.248  (CI of diff +/-0.043)  p 0.0020  higher/tied/lower 10/0/0
+  E dqn_cnn   eps0.2  vs greedy: 0.634 vs 0.266  diff +0.368  (CI of diff +/-0.054)  p 0.0020  higher/tied/lower 10/0/0
+  E dqn_wide  eps0.05 vs greedy: 0.608 vs 0.466  diff +0.142  (CI of diff +/-0.028)  p 0.0020  higher/tied/lower 10/0/0
+  E dqn_wide  eps0.1  vs greedy: 0.667 vs 0.466  diff +0.201  (CI of diff +/-0.039)  p 0.0020  higher/tied/lower 10/0/0
+  E dqn_wide  eps0.2  vs greedy: 0.742 vs 0.466  diff +0.276  (CI of diff +/-0.045)  p 0.0020  higher/tied/lower 10/0/0
+  F dqn       eps0.05 vs greedy: 0.423 vs 0.290  diff +0.133  (CI of diff +/-0.040)  p 0.0020  higher/tied/lower 10/0/0
+  F dqn       eps0.1  vs greedy: 0.506 vs 0.290  diff +0.216  (CI of diff +/-0.052)  p 0.0020  higher/tied/lower 10/0/0
+  F dqn       eps0.2  vs greedy: 0.588 vs 0.290  diff +0.298  (CI of diff +/-0.065)  p 0.0020  higher/tied/lower 10/0/0
+  F dqn_rnn   eps0.05 vs greedy: 0.795 vs 0.730  diff +0.065  (CI of diff +/-0.026)  p 0.0020  higher/tied/lower 10/0/0
+  F dqn_rnn   eps0.1  vs greedy: 0.816 vs 0.730  diff +0.086  (CI of diff +/-0.031)  p 0.0020  higher/tied/lower 10/0/0
+  F dqn_rnn   eps0.2  vs greedy: 0.840 vs 0.730  diff +0.110  (CI of diff +/-0.039)  p 0.0020  higher/tied/lower 10/0/0
+  F dqn_wide  eps0.05 vs greedy: 0.462 vs 0.338  diff +0.124  (CI of diff +/-0.028)  p 0.0020  higher/tied/lower 10/0/0
+  F dqn_wide  eps0.1  vs greedy: 0.521 vs 0.338  diff +0.183  (CI of diff +/-0.046)  p 0.0020  higher/tied/lower 10/0/0
+  F dqn_wide  eps0.2  vs greedy: 0.606 vs 0.338  diff +0.268  (CI of diff +/-0.061)  p 0.0020  higher/tied/lower 10/0/0
+  I dqn       eps0.05 vs greedy: 0.714 vs 0.642  diff +0.072  (CI of diff +/-0.024)  p 0.0020  higher/tied/lower 10/0/0
+  I dqn       eps0.1  vs greedy: 0.777 vs 0.642  diff +0.135  (CI of diff +/-0.033)  p 0.0020  higher/tied/lower 10/0/0
+  I dqn       eps0.2  vs greedy: 0.824 vs 0.642  diff +0.182  (CI of diff +/-0.035)  p 0.0020  higher/tied/lower 10/0/0
+  I ppo       eps0.05 vs greedy: 0.751 vs 0.694  diff +0.057  (CI of diff +/-0.013)  p 0.0020  higher/tied/lower 10/0/0
+  I ppo       eps0.1  vs greedy: 0.802 vs 0.694  diff +0.108  (CI of diff +/-0.022)  p 0.0020  higher/tied/lower 10/0/0
+  I ppo       eps0.2  vs greedy: 0.830 vs 0.694  diff +0.136  (CI of diff +/-0.027)  p 0.0020  higher/tied/lower 10/0/0
+  I ppo       sample  vs greedy: 0.904 vs 0.694  diff +0.210  (CI of diff +/-0.026)  p 0.0020  higher/tied/lower 10/0/0
+
+Exploratory: earlier between-arm comparisons, greedy vs eps0.05 (unpaired, uncorrected):
+  E dqn_cnn vs dqn [greedy]: 0.266 vs 0.334  diff -0.068  p 0.2738
+  E dqn_cnn vs dqn [eps0.05]: 0.430 vs 0.516  diff -0.086  p 0.1298
+  E dqn_wide vs dqn [greedy]: 0.466 vs 0.334  diff +0.132  p 0.0181
+  E dqn_wide vs dqn [eps0.05]: 0.608 vs 0.516  diff +0.092  p 0.0408
+  F dqn_rnn vs dqn [greedy]: 0.730 vs 0.290  diff +0.440  p 0.0000
+  F dqn_rnn vs dqn [eps0.05]: 0.795 vs 0.423  diff +0.372  p 0.0000
+  F dqn_wide vs dqn [greedy]: 0.338 vs 0.290  diff +0.048  p 0.3209
+  F dqn_wide vs dqn [eps0.05]: 0.462 vs 0.423  diff +0.038  p 0.2675
+  I ppo vs dqn [greedy]: 0.694 vs 0.642  diff +0.052  p 0.0353
+  I ppo vs dqn [eps0.05]: 0.751 vs 0.714  diff +0.038  p 0.0247
+
+Exploratory: other held-out metrics by mode (mean over seeds):
+  E dqn       steps           greedy 71.12  eps0.05 62.79  eps0.1 58.88  eps0.2 53.30
+  E dqn       timeout         greedy 0.67  eps0.05 0.48  eps0.1 0.41  eps0.2 0.30
+  E dqn       collisions      greedy 15.78  eps0.05 13.06  eps0.1 11.63  eps0.2 11.71
+  E dqn       revisits        greedy 47.44  eps0.05 39.23  eps0.1 35.64  eps0.2 28.59
+  E dqn       path_efficiency greedy 0.32  eps0.05 0.37  eps0.1 0.39  eps0.2 0.40
+  E dqn_cnn   steps           greedy 77.00  eps0.05 69.24  eps0.1 64.95  eps0.2 59.22
+  E dqn_cnn   timeout         greedy 0.73  eps0.05 0.57  eps0.1 0.49  eps0.2 0.37
+  E dqn_cnn   collisions      greedy 22.84  eps0.05 18.63  eps0.1 16.57  eps0.2 15.22
+  E dqn_cnn   revisits        greedy 47.04  eps0.05 41.14  eps0.1 37.71  eps0.2 31.79
+  E dqn_cnn   path_efficiency greedy 0.26  eps0.05 0.30  eps0.1 0.33  eps0.2 0.35
+  E dqn_wide  steps           greedy 59.79  eps0.05 53.49  eps0.1 50.65  eps0.2 47.06
+  E dqn_wide  timeout         greedy 0.53  eps0.05 0.39  eps0.1 0.33  eps0.2 0.26
+  E dqn_wide  collisions      greedy 11.62  eps0.05 10.03  eps0.1 9.83  eps0.2 9.61
+  E dqn_wide  revisits        greedy 38.62  eps0.05 31.98  eps0.1 28.52  eps0.2 24.18
+  E dqn_wide  path_efficiency greedy 0.45  eps0.05 0.48  eps0.1 0.48  eps0.2 0.48
+  F dqn       steps           greedy 74.98  eps0.05 68.86  eps0.1 64.97  eps0.2 60.85
+  F dqn       timeout         greedy 0.71  eps0.05 0.58  eps0.1 0.49  eps0.2 0.41
+  F dqn       collisions      greedy 23.44  eps0.05 19.73  eps0.1 18.43  eps0.2 17.02
+  F dqn       revisits        greedy 44.08  eps0.05 39.39  eps0.1 35.50  eps0.2 31.43
+  F dqn       path_efficiency greedy 0.29  eps0.05 0.32  eps0.1 0.34  eps0.2 0.35
+  F dqn_rnn   steps           greedy 39.69  eps0.05 37.25  eps0.1 36.89  eps0.2 37.12
+  F dqn_rnn   timeout         greedy 0.27  eps0.05 0.21  eps0.1 0.18  eps0.2 0.16
+  F dqn_rnn   collisions      greedy 5.50  eps0.05 4.88  eps0.1 5.30  eps0.2 6.29
+  F dqn_rnn   revisits        greedy 20.09  eps0.05 17.46  eps0.1 16.35  eps0.2 15.23
+  F dqn_rnn   path_efficiency greedy 0.68  eps0.05 0.67  eps0.1 0.65  eps0.2 0.60
+  F dqn_wide  steps           greedy 70.88  eps0.05 65.51  eps0.1 62.69  eps0.2 58.39
+  F dqn_wide  timeout         greedy 0.66  eps0.05 0.54  eps0.1 0.48  eps0.2 0.39
+  F dqn_wide  collisions      greedy 23.45  eps0.05 18.99  eps0.1 17.85  eps0.2 15.91
+  F dqn_wide  revisits        greedy 38.85  eps0.05 36.13  eps0.1 33.38  eps0.2 29.78
+  F dqn_wide  path_efficiency greedy 0.34  eps0.05 0.36  eps0.1 0.37  eps0.2 0.38
+  I dqn       steps           greedy 44.75  eps0.05 42.18  eps0.1 39.35  eps0.2 37.75
+  I dqn       timeout         greedy 0.36  eps0.05 0.29  eps0.1 0.22  eps0.2 0.18
+  I dqn       collisions      greedy 5.74  eps0.05 5.81  eps0.1 5.98  eps0.2 6.69
+  I dqn       revisits        greedy 27.40  eps0.05 23.69  eps0.1 19.88  eps0.2 16.89
+  I dqn       path_efficiency greedy 0.64  eps0.05 0.64  eps0.1 0.63  eps0.2 0.60
+  I ppo       steps           greedy 40.83  eps0.05 39.01  eps0.1 36.83  eps0.2 36.20  sample 27.43
+  I ppo       timeout         greedy 0.31  eps0.05 0.25  eps0.1 0.20  eps0.2 0.17  sample 0.10
+  I ppo       collisions      greedy 5.00  eps0.05 5.05  eps0.1 5.41  eps0.2 6.29  sample 2.73
+  I ppo       revisits        greedy 22.73  eps0.05 20.27  eps0.1 17.20  eps0.2 15.37  sample 9.54
+  I ppo       path_efficiency greedy 0.68  eps0.05 0.67  eps0.1 0.66  eps0.2 0.61  sample 0.77
+
+Exploratory: success by shortest path (12 vs longer), mean over seeds:
+  E dqn       greedy/short 0.438  greedy/long 0.190  eps0.05/short 0.640  eps0.05/long 0.345
+  E dqn_cnn   greedy/short 0.348  greedy/long 0.152  eps0.05/short 0.553  eps0.05/long 0.260
+  E dqn_wide  greedy/short 0.607  greedy/long 0.271  eps0.05/short 0.752  eps0.05/long 0.409
+  F dqn       greedy/short 0.511  greedy/long 0.155  eps0.05/short 0.713  eps0.05/long 0.246
+  F dqn_rnn   greedy/short 0.884  greedy/long 0.635  eps0.05/short 0.938  eps0.05/long 0.707
+  F dqn_wide  greedy/short 0.574  greedy/long 0.194  eps0.05/short 0.764  eps0.05/long 0.276
+  I dqn       greedy/short 0.856  greedy/long 0.428  eps0.05/short 0.888  eps0.05/long 0.539
+  I ppo       greedy/short 0.852  greedy/long 0.536  eps0.05/short 0.872  eps0.05/long 0.630  sample/short 0.935  sample/long 0.873
+
+Exploratory: eps0.05 success on mazes the greedy policy solved vs timed out on:
+  E dqn       greedy-solved mazes kept 0.998   greedy-failed mazes now solved 0.277
+  E dqn_cnn   greedy-solved mazes kept 0.990   greedy-failed mazes now solved 0.229
+  E dqn_wide  greedy-solved mazes kept 0.998   greedy-failed mazes now solved 0.266
+  F dqn       greedy-solved mazes kept 0.998   greedy-failed mazes now solved 0.186
+  F dqn_rnn   greedy-solved mazes kept 0.997   greedy-failed mazes now solved 0.242
+  F dqn_wide  greedy-solved mazes kept 0.999   greedy-failed mazes now solved 0.184
+  I dqn       greedy-solved mazes kept 0.998   greedy-failed mazes now solved 0.198
+  I ppo       greedy-solved mazes kept 0.998   greedy-failed mazes now solved 0.189
+
+Exploratory: spread of success between the 5 passes (mean over seeds of the SD):
+  E dqn       eps0.05 0.036  eps0.1 0.039  eps0.2 0.037
+  E dqn_cnn   eps0.05 0.038  eps0.1 0.036  eps0.2 0.031
+  E dqn_wide  eps0.05 0.033  eps0.1 0.033  eps0.2 0.034
+  F dqn       eps0.05 0.032  eps0.1 0.038  eps0.2 0.036
+  F dqn_rnn   eps0.05 0.022  eps0.1 0.021  eps0.2 0.022
+  F dqn_wide  eps0.05 0.028  eps0.1 0.038  eps0.2 0.033
+  I dqn       eps0.05 0.024  eps0.1 0.035  eps0.2 0.024
+  I ppo       eps0.05 0.025  eps0.1 0.024  eps0.2 0.028  sample 0.019

@@ -2,6 +2,19 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Stochastic evaluation of saved networks (Stage K)
+
+Every earlier result was greedy, and Stage I found (exploratory) that PPO did far better when it sampled its moves, while DQN had never been evaluated with any randomness. This stage re-evaluates saved networks instead of training new ones.
+
+**Added**
+- `evaluate_agent(..., policy="greedy" | "epsilon" | "sample", epsilon, repeats)`. `"epsilon"` takes the agent's best move and replaces it with a uniformly random one with probability ε (any agent; the agent is always asked first, so a recurrent agent's memory sees every observation); `"sample"` draws moves from a policy agent's probabilities (PPO only; value-based agents are refused). The training ε schedule is never used. Greedy remains the default and is unchanged. The agent's random generator and a recurrent agent's memory are restored afterwards.
+- `paired_permutation_test`: a two-sided sign-flip test for the same networks evaluated two ways (exact up to `n_resamples` sign patterns, Monte Carlo beyond).
+- `src/stochastic_study.py` (`python -m src.stochastic_study --workers 2`): plays the 80 saved networks of `cnn_generalization`, `rnn_generalization` and `ppo_generalization` on their held-out mazes greedily and with ε 0.05 / 0.1 / 0.2 (and PPO sampled), 5 passes per stochastic mode, evaluation seed 20,000 + run seed. It stops unless greedy play reproduces each network's saved results exactly. Resumable per network.
+- Study `stochastic_evaluation`, pre-registered in `results/stochastic_evaluation/PROTOCOL.md` with its analysis script `analyze.py` written before the run. Results (`results.csv`, `episodes.csv.gz`, 66,500 episodes), `ANALYSIS.md`, figure `stochastic_success.png` (`stochastic_success_figure`), notebook cells, README section and REPORT section 6.14.
+- 9 tests (309 in total): the paired test (exact values, symmetry, pairing vs not, Monte Carlo path, length check), ε evaluation leaving the agent unchanged and taking random moves, reproducibility and repeated layouts, refusing sampling for value-based agents and bad settings, a recurrent agent's memory left untouched, the runner's coverage of all 80 networks, every mode on an exported network without changing it, the greedy reproduction check, and the new chart.
+
+**Result** (pre-registered, Holm-corrected): ε 0.05 raised plain DQN's held-out success from 0.42 to 0.55 (all 30 networks improved, p < 0.001); PPO sampled beat DQN with ε 0.05 (0.90 vs 0.71, p < 0.001); the GRU network beat the plain one with ε 0.05 for both (0.80 vs 0.42, p < 0.001). Every one of the 80 networks did better with random moves than greedily. No earlier conclusion changed; greedy results are now described as a lower bound.
+
 ## PPO, a policy learner (Stage I)
 
 **Added**

@@ -43,6 +43,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **A convolutional network didn't help on new mazes.** With 3×3 convolutions over its 5×5 view, DQN solved 0.27 of new mazes against 0.33 for the standard network, and learned no faster (pre-registered, p = 0.55 for both after correction). See [below](#convolutional-q-network).
 - **A memory made DQN much better on new mazes.** With a GRU memory that lasts through the episode, DQN solved 0.73 of new mazes against 0.29 for the standard network, ahead in all 10 seeds (pre-registered, p = 0.0004 after correction), and 0.34 for a plain network of the same size. It is the first change in this project to improve success on mazes the agent has never seen. See [below](#recurrent-q-network-memory).
 - **PPO generalised slightly better than DQN but learned more slowly.** With standard settings for both, PPO solved 0.69 of new mazes against 0.64 (pre-registered, p = 0.037 after correction), all of it on the longer mazes, and learned its training mazes more slowly (0.83 vs 0.90, p = 0.0003, behind in all 10 seeds). See [below](#ppo-a-policy-learner).
+- **Greedy evaluation understated every agent.** Re-playing 80 saved networks with one random move in twenty raised plain DQN's success on new mazes from 0.42 to 0.55, and every one of the 30 DQN networks improved (pre-registered, p < 0.001 after correction): random moves break loops. The memory result held under randomness (0.80 vs 0.42), and so did PPO's lead when it sampled its policy (0.90 vs 0.71 for DQN with random moves). See [below](#greedy-vs-a-little-randomness).
 - **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
 
 **What it does not (yet) support**
@@ -51,7 +52,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - That mistake memory *hurts*: it was behind plain DQN on held-out mazes in 9 of 10 seeds, but the difference was not significant (p = 0.082).
 - That a bigger network generalizes better: in the CNN study a plain network of the CNN's size solved 0.47 of new mazes against 0.33 (exploratory, p = 0.019 uncorrected), but a pre-registered retest with fresh seeds and mazes did not replicate it (0.34 vs 0.29, p = 0.32).
 - That the memory itself, rather than how the memory network is trained, explains its gain: it also learns from runs of 16 consecutive steps, so each update trains on up to 8× as many steps as the other networks. A plain network of the same size rules out size, not this.
-- That PPO beats DQN by a wide margin: PPO solved 0.90 of new mazes when it sampled its moves instead of taking the most likely one, but DQN was only ever evaluated greedily, so that number has nothing to compare against yet.
+- That PPO's *network* is much better than DQN's: PPO sampling its policy beat DQN with random moves by a wide margin (0.90 vs 0.71), but with the same kind of random moves for both the gap was small (0.75 vs 0.71, exploratory). Most of the wide margin comes from how PPO uses its randomness.
 
 | Learning to avoid mistakes (fixed maze) | When fewer mistakes is not better (terminal hazards) |
 |---|---|
@@ -175,6 +176,22 @@ PPO caught up on the training mazes by the end (0.93 vs 0.94), and its held-out 
 
 ![Success on training and held-out mazes, PPO study](docs/figures/ppo_success.png)
 
+### Greedy vs a little randomness
+
+Every result above is **greedy**: the agent always takes the move it rates best. With a 5×5 view, a greedy agent that sees the same window twice makes the same move and can loop until it runs out of time. In [`stochastic_evaluation`](results/stochastic_evaluation/ANALYSIS.md) ([protocol](results/stochastic_evaluation/PROTOCOL.md), written before the run) the **80 saved networks** of the CNN, memory and PPO studies replay their held-out mazes, with no further training, greedily and with a random move a fraction ε of the time (5 passes per maze); PPO also samples its own policy.
+
+| Question | Result | Verdict |
+|---|---|---|
+| Does ε = 0.05 change plain DQN's success on new mazes? (30 networks, each against itself) | 0.42 → **0.55**, all 30 improved | **Yes, higher** (p < 0.001) |
+| PPO sampled vs DQN with ε = 0.05 (PPO study) | **0.90** vs 0.71 | **PPO better** (p < 0.001, no overlap) |
+| GRU memory vs standard network, both ε = 0.05 (memory study) | **0.80** vs 0.42 | **GRU better** (p < 0.001, no overlap) |
+
+*p-values are Holm-corrected.*
+
+Every one of the 80 networks did better with random moves than greedily, at every ε tried (0.05, 0.1, 0.2). The random moves break loops: mazes solved greedily stayed solved (99–100%), and 18–28% of the mazes a network had timed out on were now solved. Networks that looped most gained most; the GRU and PPO, which looped least, gained least. No earlier conclusion changed: memory still made by far the biggest difference, the CNN still didn't help, and PPO's edge over DQN with the *same* ε stayed small (0.75 vs 0.71). The greedy numbers in this README are fair for comparing agents, but they understate what the networks can do on new mazes. The whole study took 13 minutes, since nothing is trained.
+
+![Held-out success of the same networks in each evaluation mode](docs/figures/stochastic_success.png)
+
 ## Quick start
 
 **In Colab (no setup):** click the badge above, then *Runtime → Run all*. The notebook clones this repository, runs the tests, trains all agents, shows the results and launches the dashboard with a public link.
@@ -224,6 +241,7 @@ python -m src.training --resume runs/dqn_s0 --episodes 800    # extend a finishe
 python -m src.evaluation --experiment fixed_maze              # a full multi-seed experiment
 python -m src.evaluation --experiment fixed_maze --seeds 2 --agents random tabular_q   # quick version
 python -m src.evaluation --experiment long_memory_mistakes --workers 4   # 4 runs at a time, same results
+python -m src.stochastic_study --workers 2                    # re-evaluate saved networks with random moves
 python -m src.visualization                                   # regenerate docs/figures from results/
 ```
 
@@ -258,7 +276,7 @@ Exploration is ε-greedy, decaying linearly from 1.0 to 0.05. Timeouts are treat
 
 **Learning from mistakes** (`src/training.py`). Every episode logs its collisions, hazards, revisits, timeouts and where the reward came from; every mistake is logged with its step, cell and action. `mistake_hotspots` finds the agent's recurring failures, and `compare_phases` compares early and late training. Checkpoints include the replay buffer and every random-number-generator state, so a resumed run reproduces an uninterrupted one exactly (tested).
 
-**Evaluation** (`src/evaluation.py`). Agents are evaluated greedily with exploration off, without changing them, on training layouts and on unseen ones. Results are reported as the mean across seeds with a t-based 95% confidence interval, and pairs of agents are compared with an exact permutation test.
+**Evaluation** (`src/evaluation.py`). Agents are evaluated greedily with exploration off, without changing them, on training layouts and on unseen ones; `evaluate_agent(policy="epsilon" | "sample")` adds random moves or policy sampling instead (`src/stochastic_study.py`). Results are reported as the mean across seeds with a t-based 95% confidence interval, and pairs of agents are compared with an exact permutation test (or a paired sign-flip test when the same network is evaluated two ways).
 
 **The lighter side** (`src/fun.py`). Agents have nicknames (Chaos Monkey, The Spreadsheet, Neural Ned, Neural Ned (Holds Grudges)), every mistake gets commentary, there are seven achievements, and the Hall of Shame lists the agent's most repeated mistakes:
 
@@ -279,11 +297,12 @@ src/
   agents.py         random, tabular Q-learning, DQN (+ Double, dueling, n-step, CNN, GRU), PPO, agent factory
   replay.py         uniform, prioritized (sum tree), mistake and sequence replay buffers
   training.py       Trainer: logs, checkpoints, exact resumption, CLI
-  evaluation.py     greedy evaluation, multi-seed experiments, statistics, CLI
+  evaluation.py     greedy (or ε / sampled) evaluation, multi-seed experiments, statistics, CLI
+  stochastic_study.py  re-evaluates the saved networks with random moves (Stage K)
   visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              300 tests (pytest); `-m "not slow"` skips one long training test
+tests/              309 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report
@@ -301,6 +320,7 @@ LICENSE             MIT License
 - 5–10 seeds per experiment: enough to show large differences, not small ones.
 - One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule, one CNN architecture, one recurrent setting (GRU 128, runs of 16 steps) and one set of standard PPO settings. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
+- Greedy evaluation is a lower bound: a little randomness raised every saved network's success on new mazes (see [above](#greedy-vs-a-little-randomness)).
 
 See [REPORT.md](REPORT.md) for the full discussion. To write up a new experiment, start from [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md); to publish your own copy, follow [docs/PUBLISHING.md](docs/PUBLISHING.md).
 

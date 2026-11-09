@@ -1,0 +1,82 @@
+80 networks, modes ['greedy', 'eps0.05', 'eps0.1', 'eps0.2', 'sample'], workers 2
+done cnn_generalization dqn s500: {'greedy': 0.24, 'eps0.05': 0.496, 'eps0.1': 0.54, 'eps0.2': 0.656}
+done cnn_generalization dqn s501: {'greedy': 0.42, 'eps0.05': 0.596, 'eps0.1': 0.668, 'eps0.2': 0.756}
+done cnn_generalization dqn s502: {'greedy': 0.34, 'eps0.05': 0.456, 'eps0.1': 0.536, 'eps0.2': 0.616}
+done cnn_generalization dqn s503: {'greedy': 0.54, 'eps0.05': 0.7, 'eps0.1': 0.768, 'eps0.2': 0.824}
+done cnn_generalization dqn s504: {'greedy': 0.38, 'eps0.05': 0.548, 'eps0.1': 0.656, 'eps0.2': 0.748}
+done cnn_generalization dqn s505: {'greedy': 0.46, 'eps0.05': 0.628, 'eps0.1': 0.66, 'eps0.2': 0.78}
+done cnn_generalization dqn s506: {'greedy': 0.28, 'eps0.05': 0.488, 'eps0.1': 0.62, 'eps0.2': 0.724}
+done cnn_generalization dqn s507: {'greedy': 0.28, 'eps0.05': 0.456, 'eps0.1': 0.544, 'eps0.2': 0.64}
+done cnn_generalization dqn s508: {'greedy': 0.18, 'eps0.05': 0.376, 'eps0.1': 0.48, 'eps0.2': 0.612}
+done cnn_generalization dqn s509: {'greedy': 0.22, 'eps0.05': 0.416, 'eps0.1': 0.468, 'eps0.2': 0.628}
+done cnn_generalization dqn_cnn s500: {'greedy': 0.38, 'eps0.05': 0.564, 'eps0.1': 0.66, 'eps0.2': 0.708}
+done cnn_generalization dqn_cnn s501: {'greedy': 0.12, 'eps0.05': 0.272, 'eps0.1': 0.292, 'eps0.2': 0.448}
+done cnn_generalization dqn_cnn s502: {'greedy': 0.22, 'eps0.05': 0.368, 'eps0.1': 0.46, 'eps0.2': 0.6}
+done cnn_generalization dqn_cnn s503: {'greedy': 0.3, 'eps0.05': 0.508, 'eps0.1': 0.58, 'eps0.2': 0.696}
+done cnn_generalization dqn_cnn s504: {'greedy': 0.18, 'eps0.05': 0.356, 'eps0.1': 0.464, 'eps0.2': 0.604}
+done cnn_generalization dqn_cnn s505: {'greedy': 0.3, 'eps0.05': 0.512, 'eps0.1': 0.604, 'eps0.2': 0.768}
+done cnn_generalization dqn_cnn s506: {'greedy': 0.58, 'eps0.05': 0.664, 'eps0.1': 0.692, 'eps0.2': 0.768}
+done cnn_generalization dqn_cnn s507: {'greedy': 0.26, 'eps0.05': 0.424, 'eps0.1': 0.508, 'eps0.2': 0.632}
+done cnn_generalization dqn_cnn s508: {'greedy': 0.26, 'eps0.05': 0.424, 'eps0.1': 0.552, 'eps0.2': 0.648}
+done cnn_generalization dqn_cnn s509: {'greedy': 0.06, 'eps0.05': 0.208, 'eps0.1': 0.328, 'eps0.2': 0.464}
+done cnn_generalization dqn_wide s500: {'greedy': 0.42, 'eps0.05': 0.6, 'eps0.1': 0.644, 'eps0.2': 0.74}
+done cnn_generalization dqn_wide s501: {'greedy': 0.58, 'eps0.05': 0.696, 'eps0.1': 0.74, 'eps0.2': 0.784}
+done cnn_generalization dqn_wide s502: {'greedy': 0.3, 'eps0.05': 0.468, 'eps0.1': 0.612, 'eps0.2': 0.684}
+done cnn_generalization dqn_wide s503: {'greedy': 0.56, 'eps0.05': 0.68, 'eps0.1': 0.724, 'eps0.2': 0.784}
+done cnn_generalization dqn_wide s504: {'greedy': 0.3, 'eps0.05': 0.464, 'eps0.1': 0.512, 'eps0.2': 0.608}
+done cnn_generalization dqn_wide s505: {'greedy': 0.46, 'eps0.05': 0.624, 'eps0.1': 0.712, 'eps0.2': 0.784}
+done cnn_generalization dqn_wide s506: {'greedy': 0.46, 'eps0.05': 0.64, 'eps0.1': 0.676, 'eps0.2': 0.764}
+done cnn_generalization dqn_wide s507: {'greedy': 0.48, 'eps0.05': 0.636, 'eps0.1': 0.668, 'eps0.2': 0.744}
+done cnn_generalization dqn_wide s508: {'greedy': 0.54, 'eps0.05': 0.604, 'eps0.1': 0.668, 'eps0.2': 0.72}
+done cnn_generalization dqn_wide s509: {'greedy': 0.56, 'eps0.05': 0.664, 'eps0.1': 0.716, 'eps0.2': 0.804}
+done rnn_generalization dqn s600: {'greedy': 0.14, 'eps0.05': 0.404, 'eps0.1': 0.472, 'eps0.2': 0.568}
+done rnn_generalization dqn s601: {'greedy': 0.26, 'eps0.05': 0.368, 'eps0.1': 0.444, 'eps0.2': 0.52}
+done rnn_generalization dqn s602: {'greedy': 0.32, 'eps0.05': 0.436, 'eps0.1': 0.456, 'eps0.2': 0.56}
+done rnn_generalization dqn s603: {'greedy': 0.42, 'eps0.05': 0.548, 'eps0.1': 0.596, 'eps0.2': 0.652}
+done rnn_generalization dqn s604: {'greedy': 0.26, 'eps0.05': 0.396, 'eps0.1': 0.52, 'eps0.2': 0.592}
+done rnn_generalization dqn s605: {'greedy': 0.12, 'eps0.05': 0.272, 'eps0.1': 0.456, 'eps0.2': 0.592}
+done rnn_generalization dqn s606: {'greedy': 0.38, 'eps0.05': 0.44, 'eps0.1': 0.516, 'eps0.2': 0.584}
+done rnn_generalization dqn s607: {'greedy': 0.34, 'eps0.05': 0.412, 'eps0.1': 0.52, 'eps0.2': 0.556}
+done rnn_generalization dqn s608: {'greedy': 0.36, 'eps0.05': 0.512, 'eps0.1': 0.564, 'eps0.2': 0.672}
+done rnn_generalization dqn s609: {'greedy': 0.3, 'eps0.05': 0.444, 'eps0.1': 0.52, 'eps0.2': 0.584}
+done rnn_generalization dqn_rnn s600: {'greedy': 0.7, 'eps0.05': 0.768, 'eps0.1': 0.78, 'eps0.2': 0.832}
+done rnn_generalization dqn_rnn s601: {'greedy': 0.88, 'eps0.05': 0.912, 'eps0.1': 0.92, 'eps0.2': 0.928}
+done rnn_generalization dqn_rnn s602: {'greedy': 0.68, 'eps0.05': 0.776, 'eps0.1': 0.812, 'eps0.2': 0.812}
+done rnn_generalization dqn_rnn s603: {'greedy': 0.76, 'eps0.05': 0.832, 'eps0.1': 0.852, 'eps0.2': 0.876}
+done rnn_generalization dqn_rnn s604: {'greedy': 0.74, 'eps0.05': 0.792, 'eps0.1': 0.82, 'eps0.2': 0.832}
+done rnn_generalization dqn_rnn s605: {'greedy': 0.48, 'eps0.05': 0.608, 'eps0.1': 0.64, 'eps0.2': 0.692}
+done rnn_generalization dqn_rnn s606: {'greedy': 0.7, 'eps0.05': 0.784, 'eps0.1': 0.804, 'eps0.2': 0.848}
+done rnn_generalization dqn_rnn s607: {'greedy': 0.84, 'eps0.05': 0.848, 'eps0.1': 0.856, 'eps0.2': 0.868}
+done rnn_generalization dqn_rnn s608: {'greedy': 0.84, 'eps0.05': 0.864, 'eps0.1': 0.892, 'eps0.2': 0.9}
+done rnn_generalization dqn_rnn s609: {'greedy': 0.68, 'eps0.05': 0.764, 'eps0.1': 0.78, 'eps0.2': 0.808}
+done rnn_generalization dqn_wide s600: {'greedy': 0.3, 'eps0.05': 0.444, 'eps0.1': 0.488, 'eps0.2': 0.58}
+done rnn_generalization dqn_wide s601: {'greedy': 0.36, 'eps0.05': 0.496, 'eps0.1': 0.564, 'eps0.2': 0.692}
+done rnn_generalization dqn_wide s602: {'greedy': 0.1, 'eps0.05': 0.288, 'eps0.1': 0.388, 'eps0.2': 0.496}
+done rnn_generalization dqn_wide s603: {'greedy': 0.36, 'eps0.05': 0.508, 'eps0.1': 0.532, 'eps0.2': 0.648}
+done rnn_generalization dqn_wide s604: {'greedy': 0.3, 'eps0.05': 0.428, 'eps0.1': 0.512, 'eps0.2': 0.592}
+done rnn_generalization dqn_wide s605: {'greedy': 0.3, 'eps0.05': 0.448, 'eps0.1': 0.544, 'eps0.2': 0.632}
+done rnn_generalization dqn_wide s606: {'greedy': 0.42, 'eps0.05': 0.532, 'eps0.1': 0.588, 'eps0.2': 0.612}
+done rnn_generalization dqn_wide s607: {'greedy': 0.34, 'eps0.05': 0.44, 'eps0.1': 0.52, 'eps0.2': 0.628}
+done rnn_generalization dqn_wide s608: {'greedy': 0.48, 'eps0.05': 0.524, 'eps0.1': 0.536, 'eps0.2': 0.588}
+done rnn_generalization dqn_wide s609: {'greedy': 0.42, 'eps0.05': 0.508, 'eps0.1': 0.536, 'eps0.2': 0.596}
+done ppo_generalization dqn s700: {'greedy': 0.62, 'eps0.05': 0.668, 'eps0.1': 0.752, 'eps0.2': 0.804}
+done ppo_generalization dqn s701: {'greedy': 0.68, 'eps0.05': 0.712, 'eps0.1': 0.788, 'eps0.2': 0.832}
+done ppo_generalization dqn s702: {'greedy': 0.64, 'eps0.05': 0.724, 'eps0.1': 0.832, 'eps0.2': 0.844}
+done ppo_generalization dqn s703: {'greedy': 0.54, 'eps0.05': 0.68, 'eps0.1': 0.76, 'eps0.2': 0.82}
+done ppo_generalization dqn s704: {'greedy': 0.72, 'eps0.05': 0.748, 'eps0.1': 0.804, 'eps0.2': 0.816}
+done ppo_generalization dqn s705: {'greedy': 0.64, 'eps0.05': 0.704, 'eps0.1': 0.776, 'eps0.2': 0.812}
+done ppo_generalization dqn s706: {'greedy': 0.66, 'eps0.05': 0.752, 'eps0.1': 0.796, 'eps0.2': 0.848}
+done ppo_generalization dqn s707: {'greedy': 0.56, 'eps0.05': 0.652, 'eps0.1': 0.716, 'eps0.2': 0.784}
+done ppo_generalization dqn s708: {'greedy': 0.66, 'eps0.05': 0.732, 'eps0.1': 0.728, 'eps0.2': 0.808}
+done ppo_generalization dqn s709: {'greedy': 0.7, 'eps0.05': 0.764, 'eps0.1': 0.816, 'eps0.2': 0.876}
+done ppo_generalization ppo s700: {'greedy': 0.72, 'eps0.05': 0.756, 'eps0.1': 0.804, 'eps0.2': 0.8, 'sample': 0.884}
+done ppo_generalization ppo s701: {'greedy': 0.72, 'eps0.05': 0.76, 'eps0.1': 0.828, 'eps0.2': 0.852, 'sample': 0.912}
+done ppo_generalization ppo s702: {'greedy': 0.74, 'eps0.05': 0.784, 'eps0.1': 0.804, 'eps0.2': 0.84, 'sample': 0.9}
+done ppo_generalization ppo s703: {'greedy': 0.68, 'eps0.05': 0.74, 'eps0.1': 0.792, 'eps0.2': 0.82, 'sample': 0.896}
+done ppo_generalization ppo s704: {'greedy': 0.6, 'eps0.05': 0.688, 'eps0.1': 0.784, 'eps0.2': 0.812, 'sample': 0.88}
+done ppo_generalization ppo s705: {'greedy': 0.72, 'eps0.05': 0.78, 'eps0.1': 0.812, 'eps0.2': 0.844, 'sample': 0.904}
+done ppo_generalization ppo s706: {'greedy': 0.68, 'eps0.05': 0.72, 'eps0.1': 0.8, 'eps0.2': 0.816, 'sample': 0.924}
+done ppo_generalization ppo s707: {'greedy': 0.7, 'eps0.05': 0.768, 'eps0.1': 0.816, 'eps0.2': 0.82, 'sample': 0.924}
+done ppo_generalization ppo s708: {'greedy': 0.7, 'eps0.05': 0.756, 'eps0.1': 0.804, 'eps0.2': 0.84, 'sample': 0.912}
+done ppo_generalization ppo s709: {'greedy': 0.68, 'eps0.05': 0.76, 'eps0.1': 0.78, 'eps0.2': 0.86, 'sample': 0.904}
+wrote runs\experiments_stochastic\results.csv and runs\experiments_stochastic\episodes.csv.gz

@@ -3,7 +3,8 @@
 Every claim in the report should come from this module:
 
 * `evaluate_agent` plays greedy episodes (exploration off) without changing the
-  agent, on the training layout(s) or on layouts the agent never saw.
+  agent, on the training layout(s) or on layouts the agent never saw; optionally
+  with random moves (ε) or, for PPO, moves sampled from its policy (Stage K).
 * `run_experiment` trains several agents over several seeds, evaluates each
   greedily every `eval_every` episodes (the greedy learning curve) and at the
   end on training and unseen layouts, and writes everything to CSV/JSON.
@@ -104,36 +105,112 @@ def permutation_test(a: Sequence[float], b: Sequence[float],
     return float((count + 1) / (n_resamples + 1))
 
 
+def paired_permutation_test(a: Sequence[float], b: Sequence[float],
+                            n_resamples: int = 20_000, seed: int = 0) -> float:
+    """Two-sided sign-flip p-value for "a[i] and b[i] have the same mean".
+
+    For paired results (the same network evaluated two ways): under the null
+    hypothesis each difference a[i] - b[i] is equally likely to have either
+    sign. Exact (all 2^n sign patterns) when that is at most n_resamples;
+    otherwise a Monte Carlo estimate. With 10 pairs the smallest possible
+    p-value is 2/1024 ≈ 0.002.
+    """
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    if a.shape != b.shape:
+        raise ValueError("paired samples need the same length")
+    d = a - b
+    n = len(d)
+    observed = abs(d.mean()) if n else 0.0
+    if observed == 0:
+        return 1.0
+    if 2 ** n <= n_resamples:
+        signs = np.array(list(itertools.product((1.0, -1.0), repeat=n)))
+        stats = np.abs(signs @ d) / n
+        return float(np.mean(stats >= observed - 1e-12))
+    rng = np.random.default_rng(seed)
+    count = 0
+    for _ in range(n_resamples):
+        signs = rng.choice((1.0, -1.0), size=n)
+        count += abs((signs * d).mean()) >= observed - 1e-12
+    return float((count + 1) / (n_resamples + 1))
+
+
 # ---------------------------------------------------------------------------
-# Greedy evaluation
+# Evaluation (greedy by default)
 # ---------------------------------------------------------------------------
+
+EVAL_POLICIES = ("greedy", "epsilon", "sample")
+
+
+class _EpsilonPolicy:
+    """Evaluation-only wrapper: the agent's greedy move, replaced by a uniformly
+    random move with probability `epsilon`. The agent is always asked first, so
+    an agent with memory sees every observation (as during training)."""
+
+    def __init__(self, agent, epsilon: float):
+        self.agent, self.epsilon = agent, float(epsilon)
+
+    def begin_episode(self) -> None:
+        if hasattr(self.agent, "begin_episode"):
+            self.agent.begin_episode()
+
+    def act(self, obs: np.ndarray, greedy: bool = False) -> int:
+        action = self.agent.act(obs, greedy=True)
+        rng = self.agent.rng
+        if not greedy and rng.random() < self.epsilon:
+            return int(rng.integers(self.agent.n_actions))
+        return action
+
 
 def evaluate_agent(agent, env: GridWorld, layout_seeds: Optional[Sequence[int]] = None,
-                   episodes: int = 10, seed: int = 0) -> dict:
-    """Greedy (epsilon = 0) evaluation that never changes the agent.
+                   episodes: int = 10, seed: int = 0, policy: str = "greedy",
+                   epsilon: float = 0.0, repeats: int = 1) -> dict:
+    """Evaluation that never changes the agent; greedy (epsilon = 0) by default.
 
-    With layout_seeds, plays one episode on each listed layout; otherwise plays
-    `episodes` episodes on the environment's own layout(s). The agent's random
-    generator (used only to break ties between equal Q-values) is swapped for a
-    seeded one during evaluation and restored afterwards, so evaluating in the
+    With layout_seeds, plays one episode on each listed layout (`repeats` times
+    over the whole list); otherwise plays `episodes` episodes on the
+    environment's own layout(s), `repeats` times. The agent's random generator
+    (tie-breaks, random moves, policy sampling) is swapped for one seeded with
+    `seed` during evaluation and restored afterwards, so evaluating in the
     middle of training does not change how training continues.
+
+    policy: "greedy" (the best move), "epsilon" (the best move, but a uniformly
+    random one with probability `epsilon`; any agent), or "sample" (draw moves
+    from the agent's policy; agents with policy_probs, i.e. PPO). The agent's
+    training exploration schedule is never used.
 
     Returns the mean of every metric plus the per-episode summaries.
     """
+    if policy not in EVAL_POLICIES:
+        raise ValueError(f"policy must be one of {EVAL_POLICIES}, got {policy!r}")
+    if policy == "sample" and not hasattr(agent, "policy_probs"):
+        raise ValueError("policy='sample' needs an agent with a policy (PPO); "
+                         "use policy='epsilon' for value-based agents")
+    if policy == "epsilon" and not 0.0 <= epsilon <= 1.0:
+        raise ValueError("epsilon must be in [0, 1]")
+    if repeats < 1:
+        raise ValueError("repeats must be at least 1")
+    player = _EpsilonPolicy(agent, epsilon) if policy == "epsilon" else agent
+    greedy = policy == "greedy"
     original_rng = agent.rng
+    has_memory = hasattr(agent, "_memory")
+    original_memory = getattr(agent, "_memory", None)
     agent.rng = np.random.default_rng(seed)
     try:
         runs = []
         if layout_seeds is not None:
-            for i, layout in enumerate(layout_seeds):
-                runs.append(run_episode(env, agent, train=False, greedy=True,
-                                        seed=seed if i == 0 else None, layout_seed=int(layout)))
+            layouts = [int(layout) for layout in layout_seeds] * repeats
+            for i, layout in enumerate(layouts):
+                runs.append(run_episode(env, player, train=False, greedy=greedy,
+                                        seed=seed if i == 0 else None, layout_seed=layout))
         else:
-            for i in range(episodes):
-                runs.append(run_episode(env, agent, train=False, greedy=True,
+            for i in range(episodes * repeats):
+                runs.append(run_episode(env, player, train=False, greedy=greedy,
                                         seed=seed if i == 0 else None))
     finally:
         agent.rng = original_rng
+        if has_memory:
+            agent._memory = original_memory
     for r in runs:
         r.pop("mistake_log", None)
     result = {m: float(np.mean([float(r[m]) for r in runs])) for m in PHASE_METRICS}

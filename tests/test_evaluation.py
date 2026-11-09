@@ -3,13 +3,15 @@ import math
 
 import numpy as np
 import pytest
+import torch
 
-from src.agents import EpsilonSchedule, RandomAgent, TabularQAgent
+from src.agents import EpsilonSchedule, RandomAgent, TabularQAgent, make_agent
 from src.envs import make_env
 from src.evaluation import (CURVE_FILE, FINAL_FILE, METRICS, Experiment, compare_agents,
                             curve_means,
                             evaluate_agent, format_summary, load_experiment, mean_ci,
-                            permutation_test, run_experiment, summarize)
+                            paired_permutation_test, permutation_test, run_experiment,
+                            summarize)
 from src.training import train_agent
 
 TINY = dict(name="tiny", env_preset="maze", agents=("random", "tabular_q"), seeds=(0, 1),
@@ -44,6 +46,88 @@ def test_permutation_test():
     assert permutation_test(a, b) > 0.5   # overlapping samples: no evidence
     big = permutation_test(np.ones(15), np.zeros(15), n_resamples=2000)   # Monte Carlo path
     assert big < 0.01
+
+
+def test_paired_permutation_test():
+    # 5 pairs all in the same direction: only the 2 all-same-sign patterns of 32 are as extreme
+    assert paired_permutation_test([1.0, 2.0, 1.5, 1.2, 1.1], [0.0] * 5) == pytest.approx(2 / 32)
+    assert paired_permutation_test([0.3, 0.5], [0.3, 0.5]) == 1.0
+    a, b = [0.1, 0.9, 0.5, 0.2], [0.4, 0.6, 0.3, 0.8]
+    assert paired_permutation_test(a, b) == pytest.approx(paired_permutation_test(b, a))
+    # pairing matters: a constant shift is clear when paired, invisible when unpaired
+    base = np.linspace(0.0, 1.0, 10)
+    assert paired_permutation_test(base + 0.05, base) == pytest.approx(2 / 1024)
+    assert permutation_test(base + 0.05, base) > 0.5
+    big = paired_permutation_test(np.ones(30), np.zeros(30), n_resamples=2000)  # Monte Carlo
+    assert big < 0.01
+    with pytest.raises(ValueError):
+        paired_permutation_test([1.0, 2.0], [1.0])
+
+
+# -- stochastic evaluation (Stage K) --------------------------------------------------------
+
+def _trained_tabular():
+    env = make_env("maze")
+    agent = TabularQAgent(env.n_actions, seed=0,
+                          epsilon=EpsilonSchedule(decay_episodes=150))
+    train_agent(env, agent, episodes=300)
+    return agent, env
+
+
+def test_epsilon_evaluation_takes_random_moves_without_changing_the_agent():
+    agent, env = _trained_tabular()
+    q_before = {k: v.copy() for k, v in agent.q.items()}
+    rng_state = agent.rng.bit_generator.state
+    episodes_before = agent.episodes
+    greedy = evaluate_agent(agent, env, episodes=3, seed=1)
+    noisy = evaluate_agent(agent, env, episodes=3, seed=1, policy="epsilon", epsilon=1.0)
+    assert greedy["success"] == 1.0
+    assert all(e["epsilon"] == 1.0 for e in noisy["episodes"])
+    assert all(e["epsilon"] == 0.0 for e in greedy["episodes"])
+    # epsilon = 1 is a random walk, far longer than the learned route
+    assert noisy["steps"] > greedy["steps"]
+    assert agent.rng.bit_generator.state == rng_state and agent.episodes == episodes_before
+    assert agent.q.keys() == q_before.keys()
+    assert all(np.array_equal(agent.q[k], v) for k, v in q_before.items())
+
+
+def test_epsilon_evaluation_is_reproducible_and_repeats_layouts():
+    agent, _ = _trained_tabular()
+    env = make_env("maze", layout_pool=(0, 1))
+    kwargs = dict(layout_seeds=[3, 4], seed=7, policy="epsilon", epsilon=0.3, repeats=3)
+    first = evaluate_agent(agent, env, **kwargs)
+    second = evaluate_agent(agent, env, **kwargs)
+    assert first["n_episodes"] == 6
+    assert [e["layout_seed"] for e in first["episodes"]] == [3, 4] * 3
+    assert [e["steps"] for e in first["episodes"]] == [e["steps"] for e in second["episodes"]]
+
+
+def test_sampled_evaluation_needs_a_policy():
+    env = make_env("maze")
+    with pytest.raises(ValueError):
+        evaluate_agent(TabularQAgent(env.n_actions), env, policy="sample")
+    with pytest.raises(ValueError):
+        evaluate_agent(RandomAgent(4), env, policy="softmax")
+    with pytest.raises(ValueError):
+        evaluate_agent(RandomAgent(4), env, policy="epsilon", epsilon=1.5)
+    with pytest.raises(ValueError):
+        evaluate_agent(RandomAgent(4), env, repeats=0)
+    ppo = make_agent("ppo", env.obs_size, env.n_actions, seed=0, hidden=[8])
+    out = evaluate_agent(ppo, env, episodes=2, seed=3, policy="sample")
+    assert out["n_episodes"] == 2
+    again = evaluate_agent(ppo, env, episodes=2, seed=3, policy="sample")
+    assert [e["steps"] for e in out["episodes"]] == [e["steps"] for e in again["episodes"]]
+
+
+def test_epsilon_evaluation_keeps_a_recurrent_agent_memory_untouched():
+    env = make_env("maze", obs_mode="local")
+    agent = make_agent("dqn_rnn", env.obs_size, env.n_actions, seed=0)
+    agent.begin_episode()
+    obs, _ = env.reset(seed=0)
+    agent.act(obs, greedy=True)
+    memory = agent._memory.clone()
+    evaluate_agent(agent, env, episodes=1, seed=2, policy="epsilon", epsilon=0.05)
+    assert torch.equal(agent._memory, memory)
 
 
 # -- greedy evaluation ---------------------------------------------------------------------

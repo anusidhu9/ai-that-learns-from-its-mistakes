@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 
 import numpy as np
@@ -13,7 +14,8 @@ from src.visualization import (_clip_interval, cell_at, experiment_bars_figure,
                                experiment_curves_figure, frame_figure, learning_curves_figure,
                                maze_figure, maze_image, mistake_heatmap_figure,
                                mistake_types_figure, policy_map, policy_map_figure,
-                               record_episode, reward_breakdown_figure, rolling_mean)
+                               record_episode, reward_breakdown_figure, rolling_mean,
+                               stochastic_success_figure)
 
 RESULTS = Path(__file__).resolve().parent.parent / "results"
 
@@ -117,7 +119,24 @@ def _all_figures(trainer):
             exp = load_experiment(RESULTS / name)
             figs += [experiment_curves_figure(exp["curves"], "success"),
                      experiment_bars_figure(exp["summary"], "success")]
+    if (RESULTS / "stochastic_evaluation" / "results.csv").exists():
+        figs.append(stochastic_success_figure(_stochastic_rows()))
     return figs
+
+
+def _stochastic_rows():
+    with open(RESULTS / "stochastic_evaluation" / "results.csv", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+@pytest.mark.skipif(not (RESULTS / "stochastic_evaluation" / "results.csv").exists(),
+                    reason="saved results missing")
+def test_stochastic_figure_has_a_panel_per_study_and_ppo_sampled_point():
+    fig = stochastic_success_figure(_stochastic_rows())
+    assert [ax.get_title(loc="left") for ax in fig.axes] == ["Stage E", "Stage F", "Stage I"]
+    labels = {t.get_text() for t in fig.legends[0].get_texts()}
+    assert labels == {"DQN", "DQN (CNN)", "DQN (wide MLP)", "DQN (GRU memory)", "PPO"}
+    assert isinstance(stochastic_success_figure([]), Figure)
 
 
 def test_no_legend_or_title_overlaps(trained):

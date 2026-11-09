@@ -510,6 +510,59 @@ def experiment_bars_figure(summary: List[dict], metric: str = "success") -> Figu
     return fig
 
 
+STOCHASTIC_MODES = ("greedy", "eps0.05", "eps0.1", "eps0.2", "sample")
+STOCHASTIC_MODE_LABELS = ("greedy", "ε 0.05", "ε 0.1", "ε 0.2", "sampled")
+STOCHASTIC_PANELS = (("cnn_generalization", "Stage E"), ("rnn_generalization", "Stage F"),
+                     ("ppo_generalization", "Stage I"))
+
+
+def stochastic_success_figure(rows: List[dict], metric: str = "success") -> Figure:
+    """Stage K: held-out result of the same saved networks in each evaluation
+    mode (greedy, ε-greedy, PPO sampled), mean across seeds with 95% CI bars,
+    one panel per study. rows: results.csv of src.stochastic_study."""
+    fig, axes = _figure(10, 3.6, ncols=len(STOCHASTIC_PANELS), sharey=True)
+    if not rows:
+        _empty(axes[0, 0], "No results")
+        return fig
+    x_all = np.arange(len(STOCHASTIC_MODES))
+    for ax, (study, label) in zip(axes[0], STOCHASTIC_PANELS):
+        sub = [r for r in rows if r["study"] == study]
+        for agent in _agents_in(sub):
+            xs, means, errs = [], [], []
+            for i, mode in enumerate(STOCHASTIC_MODES):
+                vals = [float(r[metric]) for r in sub if r["agent"] == agent and r["mode"] == mode]
+                if vals:
+                    m, ci = mean_ci(vals)
+                    xs.append(i)
+                    means.append(m)
+                    errs.append(0.0 if np.isnan(ci) else ci)
+            color = AGENT_COLORS.get(agent, INK)
+            ax.errorbar(xs[:4], means[:4], yerr=errs[:4], color=color, linewidth=2,
+                        marker=AGENT_MARKERS.get(agent, "o"), markersize=5, capsize=3,
+                        linestyle=AGENT_LINESTYLES.get(agent, "-"),
+                        label=AGENT_LABELS.get(agent, agent))
+            if len(xs) > 4:  # PPO sampled: a separate point, not on the ε line
+                ax.errorbar(xs[4:], means[4:], yerr=errs[4:], color=color, linestyle="none",
+                            marker=AGENT_MARKERS.get(agent, "o"), markersize=7, capsize=3)
+        # the "sampled" column only where a policy agent (PPO) has a point there
+        n = len(STOCHASTIC_MODES) if any(r["mode"] == "sample" for r in sub) else 4
+        ax.set_xticks(x_all[:n], STOCHASTIC_MODE_LABELS[:n], fontsize=8)
+        ax.set_xlim(-0.4, n - 0.6)
+        _title(ax, label)
+        if metric in BOUNDED_METRICS:
+            ax.set_ylim(0, 1.0)
+    axes[0, 0].set_ylabel(f"held-out {metric.replace('_', ' ')}")
+    handles, labels = {}, []
+    for ax in axes[0]:
+        for h, lab in zip(*ax.get_legend_handles_labels()):
+            if lab not in handles:
+                handles[lab] = h
+                labels.append(lab)
+    fig.legend([handles[lab] for lab in labels], labels, loc="outside lower center",
+               ncols=len(labels), frameon=False, fontsize=9)
+    return fig
+
+
 # ---------------------------------------------------------------------------
 # Step-by-step replays
 # ---------------------------------------------------------------------------
@@ -670,6 +723,9 @@ def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int
     ppo = load_experiment(results_dir / "ppo_generalization")
     save(experiment_curves_figure(ppo["curves"], "success"), "ppo_curves.png")
     save(experiment_bars_figure(ppo["summary"], "success"), "ppo_success.png")
+    import csv
+    with open(results_dir / "stochastic_evaluation" / "results.csv", newline="") as f:
+        save(stochastic_success_figure(list(csv.DictReader(f))), "stochastic_success.png")
 
     trainer = Trainer(TrainConfig(env_preset="maze", agent="tabular_q", episodes=400, seed=seed,
                                   agent_kwargs={"epsilon": {"decay_episodes": 300}}))
