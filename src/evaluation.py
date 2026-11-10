@@ -329,6 +329,15 @@ RN_HELDOUT = tuple(s for s in range(9600, 9652) if s not in (9619, 9632))
 PP_SEEDS = tuple(range(700, 710))
 PP_POOL = tuple(range(9700, 9750))
 PP_HELDOUT = tuple(range(9800, 9850))
+# Memory vs replay (pre-registered in results/memory_vs_replay/PROTOCOL.md): fresh
+# seeds and layouts. Held-out 10000 is the same maze as training layout 9918, so
+# the held-out set is 10001-10050 (no other repeat within the study).
+# dqn_rnn_nomem is dqn_rnn with its memory reset at every step (same network,
+# sequence replay and batch); dqn_batch512 is the MLP trained on as many steps
+# per update as the recurrent agents (32 runs x 16 steps).
+MR_SEEDS = tuple(range(800, 810))
+MR_POOL = tuple(range(9900, 9950))
+MR_HELDOUT = tuple(range(10001, 10051))
 
 EXPERIMENTS: Dict[str, Experiment] = {
     "fixed_maze": Experiment(
@@ -433,6 +442,17 @@ EXPERIMENTS: Dict[str, Experiment] = {
         description="Train DQN and PPO (same 128x128 network size, PPO with separate actor "
                     "and critic) with a local 5x5 view on 50 fresh mazes (9700-9749); test "
                     "on 50 held-out mazes (9800-9849). Seeds 700-709."),
+    "memory_vs_replay": Experiment(
+        "memory_vs_replay", "maze",
+        env_overrides={"layout_pool": list(MR_POOL), "obs_mode": "local"},
+        agents=("dqn", "dqn_batch512", "dqn_rnn", "dqn_rnn_nomem"), seeds=MR_SEEDS,
+        episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=MR_HELDOUT,
+        agent_types={"dqn_batch512": "dqn"}, agent_kwargs={"dqn_batch512": {"batch_size": 512}},
+        description="Separate memory from sequence replay: DQN (MLP 128x128, batch 64), the "
+                    "same MLP with batch 512, the GRU network with memory, and the same GRU "
+                    "network and training with its memory reset at every step; local 5x5 "
+                    "view, 50 fresh mazes (9900-9949), 50 held-out (10001-10050). "
+                    "Seeds 800-809."),
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},

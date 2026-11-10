@@ -228,6 +228,9 @@ class DQNConfig:
     recurrent: int = 0              # GRU memory units after the hidden layers (0: no memory)
     seq_length: int = 16            # recurrent: consecutive steps trained on per sequence
     burn_in: int = 16               # recurrent: earlier steps that only rebuild the memory
+    # recurrent: start the GRU from a zero memory at every step, so nothing is carried
+    # from one step to the next (same network, replay and training; no memory)
+    reset_memory_every_step: bool = False
 
 
 class QNetwork(nn.Module):
@@ -305,10 +308,15 @@ class RecurrentQNetwork(nn.Module):
     forward runs whole sequences shaped (batch, steps, obs) and returns the
     Q-values and the memory after every step; step continues from given
     memories by one observation each.
+
+    reset_every_step=True is the memory-free control: every step starts the
+    GRU from h = 0, so h_t = GRU(layers(o_t), 0) depends on o_t alone. The
+    layers and their initial weights are exactly those of the network with
+    memory; only the carrying of information between steps is removed.
     """
 
     def __init__(self, obs_size: int, n_actions: int, hidden: Tuple[int, ...] = (128,),
-                 memory: int = 128):
+                 memory: int = 128, reset_every_step: bool = False):
         super().__init__()
         layers, size = [], obs_size
         for width in hidden:
@@ -317,9 +325,15 @@ class RecurrentQNetwork(nn.Module):
         self.net = nn.Sequential(*layers)
         self.gru = nn.GRU(size, memory, batch_first=True)
         self.head = nn.Linear(memory, n_actions)
+        self.reset_every_step = reset_every_step
 
     def forward(self, x: torch.Tensor, h: Optional[torch.Tensor] = None):
-        out, _ = self.gru(self.net(x), h)
+        if self.reset_every_step:
+            batch, steps = x.shape[0], x.shape[1]
+            out, _ = self.gru(self.net(x).reshape(batch * steps, 1, -1))  # h = 0 each step
+            out = out.reshape(batch, steps, -1)
+        else:
+            out, _ = self.gru(self.net(x), h)
         return self.head(out), out
 
     def step(self, x: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
@@ -337,7 +351,8 @@ DQN_NICKNAMES = {"dqn": "Neural Ned", "dqn_per": "Neural Ned (Holds Grudges)",
                  "dqn_nstep": "Neural Ned (Looks Ahead)",
                  "dqn_dueling_nstep": "Neural Ned (Two-Headed, Looks Ahead)",
                  "dqn_cnn": "Neural Ned (Sees Patterns)",
-                 "dqn_rnn": "Neural Ned (Remembers)"}
+                 "dqn_rnn": "Neural Ned (Remembers)",
+                 "dqn_rnn_nomem": "Neural Ned (Remembers Nothing)"}
 N_STEP_DEFAULT = 3  # n for the named n-step agents (as in Rainbow, Hessel et al., 2018)
 # Network of the named CNN agent: two 3x3 convolutions (16 and 32 channels) over
 # the 5x5 local view, then one hidden layer of 128.
@@ -348,11 +363,12 @@ RNN_DEFAULT = dict(recurrent=128, hidden=(128,), batch_size=32)
 
 
 def dqn_name(config: DQNConfig) -> str:
-    """'dqn' plus '_per', '_cnn', '_rnn', '_dueling', '_nstep' and '_mistake'
-    for each option on, e.g. 'dqn_per_mistake' or 'dqn_dueling_nstep'."""
+    """'dqn' plus '_per', '_cnn', '_rnn', '_nomem', '_dueling', '_nstep' and
+    '_mistake' for each option on, e.g. 'dqn_per_mistake' or 'dqn_dueling_nstep'."""
     return ("dqn_per" if config.prioritized else "dqn") + \
         ("_cnn" if config.conv else "") + \
         ("_rnn" if config.recurrent else "") + \
+        ("_nomem" if config.reset_memory_every_step else "") + \
         ("_dueling" if config.dueling else "") + \
         ("_nstep" if config.n_step > 1 else "") + \
         ("_mistake" if config.mistake_replay else "")
@@ -398,7 +414,9 @@ class DQNAgent:
     each after up to burn_in steps that rebuild the memory without being
     trained on; the loss is the mean over the trained steps. It can't be
     combined with PER, mistake replay, n-step returns, dueling heads or
-    convolutions.
+    convolutions. reset_memory_every_step keeps everything about the recurrent
+    agent (network, sequence replay, burn-in, batch) but starts its GRU from a
+    zero memory at every step: the control for "memory" vs "how it is trained".
     """
 
     def __init__(self, obs_size: int, n_actions: int, config: Optional[DQNConfig] = None,
@@ -423,9 +441,12 @@ class DQNAgent:
                                or cfg.dueling or cfg.conv):
             raise ValueError("a recurrent agent can't be combined with PER, mistake replay, "
                              "n-step returns, dueling heads or convolutions")
+        if cfg.reset_memory_every_step and not self.recurrent:
+            raise ValueError("reset_memory_every_step needs a recurrent agent (recurrent > 0)")
         if self.recurrent:
-            self.online = RecurrentQNetwork(obs_size, n_actions, cfg.hidden, cfg.recurrent)
-            self.target = RecurrentQNetwork(obs_size, n_actions, cfg.hidden, cfg.recurrent)
+            reset = cfg.reset_memory_every_step
+            self.online = RecurrentQNetwork(obs_size, n_actions, cfg.hidden, cfg.recurrent, reset)
+            self.target = RecurrentQNetwork(obs_size, n_actions, cfg.hidden, cfg.recurrent, reset)
         else:
             self.online = QNetwork(obs_size, n_actions, cfg.hidden, cfg.dueling, cfg.conv,
                                    cfg.conv_input)
@@ -645,7 +666,9 @@ class DQNAgent:
                 or cfg.get("mistake_replay", False) != self.config.mistake_replay
                 or cfg.get("dueling", False) != self.config.dueling
                 or cfg.get("n_step", 1) != self.config.n_step
-                or cfg.get("recurrent", 0) != self.config.recurrent):
+                or cfg.get("recurrent", 0) != self.config.recurrent
+                or cfg.get("reset_memory_every_step", False)
+                != self.config.reset_memory_every_step):
             raise ValueError("checkpoint network, replay type or n-step setting differs "
                              "from this agent")
         self.config = DQNConfig(**cfg)
@@ -903,8 +926,9 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
     DQN variants: 'dqn', 'dqn_per' (prioritized replay), 'dqn_mistake'
     (mistake-aware replay), 'dqn_per_mistake' (both), 'dqn_dueling' (dueling
     heads), 'dqn_nstep' (3-step returns), 'dqn_dueling_nstep', 'dqn_cnn'
-    (convolutional network, see CNN_DEFAULT) and 'dqn_rnn' (recurrent network
-    with memory, see RNN_DEFAULT), and 'ppo' (PPOAgent). kwargs go to
+    (convolutional network, see CNN_DEFAULT), 'dqn_rnn' (recurrent network
+    with memory, see RNN_DEFAULT), 'dqn_rnn_nomem' (the same network and
+    training with the memory reset at every step), and 'ppo' (PPOAgent). kwargs go to
     TabularQAgent, or become DQNConfig / PPOConfig fields. PPO explores by
     sampling its policy, so an `epsilon` schedule passed to it is ignored.
     """
@@ -927,6 +951,8 @@ def make_agent(name: str, obs_size: int, n_actions: int, seed: Optional[int] = N
         if "_rnn" in name:
             for key, value in RNN_DEFAULT.items():
                 kwargs.setdefault(key, value)
+        if name.endswith("_nomem"):
+            kwargs["reset_memory_every_step"] = True
         return DQNAgent(obs_size, n_actions, DQNConfig(**kwargs), seed=seed)
     raise ValueError(f"unknown agent {name!r}; choose random, tabular_q, ppo or one of "
                      f"{', '.join(DQN_NICKNAMES)}")

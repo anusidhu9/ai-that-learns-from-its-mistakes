@@ -42,6 +42,7 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **Training on easy mazes first made DQN learn more slowly.** With the same 50 mazes in easiest-first order, DQN learned them more slowly (0.72 vs 0.85, pre-registered, p = 0.0003 after correction, behind in all 10 seeds). On new mazes it was 0.49 vs 0.57, not a significant difference (p = 0.093). See [below](#training-curriculum).
 - **A convolutional network didn't help on new mazes.** With 3×3 convolutions over its 5×5 view, DQN solved 0.27 of new mazes against 0.33 for the standard network, and learned no faster (pre-registered, p = 0.55 for both after correction). See [below](#convolutional-q-network).
 - **A memory made DQN much better on new mazes.** With a GRU memory that lasts through the episode, DQN solved 0.73 of new mazes against 0.29 for the standard network, ahead in all 10 seeds (pre-registered, p = 0.0004 after correction), and 0.34 for a plain network of the same size. It is the first change in this project to improve success on mazes the agent has never seen. See [below](#recurrent-q-network-memory).
+- **It is the memory, not the training that comes with it.** The same GRU network, trained identically but with its memory reset before every step, solved 0.70 of new mazes against 0.88 with memory (pre-registered, p < 0.001 after correction, behind in all 10 seeds), no better than the standard network (0.70). A standard network trained on as many steps per update did not improve (0.47, p = 0.061). See [below](#memory-or-sequence-replay).
 - **PPO generalised slightly better than DQN but learned more slowly.** With standard settings for both, PPO solved 0.69 of new mazes against 0.64 (pre-registered, p = 0.037 after correction), all of it on the longer mazes, and learned its training mazes more slowly (0.83 vs 0.90, p = 0.0003, behind in all 10 seeds). See [below](#ppo-a-policy-learner).
 - **Greedy evaluation understated every agent.** Re-playing 80 saved networks with one random move in twenty raised plain DQN's success on new mazes from 0.42 to 0.55, and every one of the 30 DQN networks improved (pre-registered, p < 0.001 after correction): random moves break loops. The memory result held under randomness (0.80 vs 0.42), and so did PPO's lead when it sampled its policy (0.90 vs 0.71 for DQN with random moves). See [below](#greedy-vs-a-little-randomness).
 - **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
@@ -51,7 +52,6 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - How common DQN's late collapse is: it happened in 1 of 10 hazard-maze runs, too few to estimate a rate.
 - That mistake memory *hurts*: it was behind plain DQN on held-out mazes in 9 of 10 seeds, but the difference was not significant (p = 0.082).
 - That a bigger network generalizes better: in the CNN study a plain network of the CNN's size solved 0.47 of new mazes against 0.33 (exploratory, p = 0.019 uncorrected), but a pre-registered retest with fresh seeds and mazes did not replicate it (0.34 vs 0.29, p = 0.32).
-- That the memory itself, rather than how the memory network is trained, explains its gain: it also learns from runs of 16 consecutive steps, so each update trains on up to 8× as many steps as the other networks. A plain network of the same size rules out size, not this.
 - That PPO's *network* is much better than DQN's: PPO sampling its policy beat DQN with random moves by a wide margin (0.90 vs 0.71), but with the same kind of random moves for both the gap was small (0.75 vs 0.71, exploratory). Most of the wide margin comes from how PPO uses its randomness.
 
 | Learning to avoid mistakes (fixed maze) | When fewer mistakes is not better (terminal hazards) |
@@ -157,7 +157,7 @@ With a 5×5 view, the agent cannot tell whether it has been somewhere before, an
 
 *p-values are Holm-corrected.*
 
-The memory network also beat the same-size wide MLP on held-out mazes (0.73 vs 0.34, exploratory, p = 0.0001), so its gain is not about size. It learned its training mazes almost perfectly (0.97 vs 0.64) and helped most on long mazes (0.64 vs 0.16 on the 31 held-out mazes longer than the shortest path length). Much of the drop in revisits comes from finishing sooner; revisits per step fell only from 0.60 to 0.49 (p = 0.048, exploratory). It is not yet known whether the gain comes from the memory itself or from training on 16-step runs (see [the analysis](results/rnn_generalization/ANALYSIS.md#interpretation)). A memory run took 1–2 hours against about 9 minutes for an MLP. All 30 trained networks are in [`results/rnn_generalization/models/`](results/rnn_generalization/models) (9.9 MB).
+The memory network also beat the same-size wide MLP on held-out mazes (0.73 vs 0.34, exploratory, p = 0.0001), so its gain is not about size. It learned its training mazes almost perfectly (0.97 vs 0.64) and helped most on long mazes (0.64 vs 0.16 on the 31 held-out mazes longer than the shortest path length). Much of the drop in revisits comes from finishing sooner; revisits per step fell only from 0.60 to 0.49 (p = 0.048, exploratory). A follow-up showed the gain is the memory itself, not training on 16-step runs (see [below](#memory-or-sequence-replay)). A memory run took 1–2 hours against about 9 minutes for an MLP. All 30 trained networks are in [`results/rnn_generalization/models/`](results/rnn_generalization/models) (9.9 MB).
 
 ![Success on training and held-out mazes, memory study](docs/figures/rnn_success.png)
 
@@ -191,6 +191,22 @@ Every result above is **greedy**: the agent always takes the move it rates best.
 Every one of the 80 networks did better with random moves than greedily, at every ε tried (0.05, 0.1, 0.2). The random moves break loops: mazes solved greedily stayed solved (99–100%), and 18–28% of the mazes a network had timed out on were now solved. Networks that looped most gained most; the GRU and PPO, which looped least, gained least. No earlier conclusion changed: memory still made by far the biggest difference, the CNN still didn't help, and PPO's edge over DQN with the *same* ε stayed small (0.75 vs 0.71). The greedy numbers in this README are fair for comparing agents, but they understate what the networks can do on new mazes. The whole study took 13 minutes, since nothing is trained.
 
 ![Held-out success of the same networks in each evaluation mode](docs/figures/stochastic_success.png)
+
+### Memory or sequence replay?
+
+The memory network is also trained differently: it learns from runs of 16 consecutive steps, so each update trains on 8× as many steps as the standard network. Which one explains its gain? In [`memory_vs_replay`](results/memory_vs_replay/ANALYSIS.md) ([protocol](results/memory_vs_replay/PROTOCOL.md), written before the run, fresh seeds 800–809 and fresh mazes), four versions of DQN train on the **same 50 mazes**: the standard MLP, the same MLP with **batch 512** (as many trained steps per update as the memory network), the **GRU memory** network, and the **same GRU network with its memory reset before every step** (`dqn_rnn_nomem`: identical training, no memory).
+
+| Question | Compared | Held-out success | Verdict |
+|---|---|---|---|
+| Is it the memory itself? | GRU vs GRU, memory reset | **0.88** vs 0.70 | **Yes** (p < 0.001, ahead in 10/10 seeds) |
+| Do 8× more steps per update help a plain network? | batch 512 vs batch 64 | 0.47 vs 0.70 | No evidence (p = 0.061) |
+| Does the memory result replicate? | GRU vs standard MLP | **0.88** vs 0.70 | **Yes** (p < 0.001, ahead in 10/10 seeds) |
+
+*p-values are Holm-corrected.*
+
+With its memory reset at every step, the recurrent network did **exactly as well as the standard network** (0.70 vs 0.70), so its 16-step training added nothing measurable: the gain is the memory. Without memory it also went back to cells it had visited as often as the standard network (0.63 vs 0.61 revisits per step, against 0.32 with memory). Three of the ten batch-512 runs never learned the task at all, so H2 is "no evidence", not "batch 512 hurts". The results held with ε = 0.05 in play (GRU 0.90, memory reset 0.76, MLP 0.77). The standard DQN did much better here (0.70) than in the first memory study (0.29), so the gain was smaller (+0.17). A GRU run took about an hour, an MLP run about 7 minutes. All 40 trained networks are in [`results/memory_vs_replay/models/`](results/memory_vs_replay/models) (11.1 MB).
+
+![Success on training and held-out mazes, memory vs replay](docs/figures/memory_replay_success.png)
 
 ## Quick start
 
@@ -302,7 +318,7 @@ src/
   visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              309 tests (pytest); `-m "not slow"` skips one long training test
+tests/              315 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report

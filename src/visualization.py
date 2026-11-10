@@ -19,8 +19,8 @@ from src.evaluation import mean_ci
 from src.fun import event_line
 
 AGENT_ORDER = ("random", "tabular_q", "tabular_q_shaped", "dqn", "dqn_shaped", "dqn_dueling",
-               "dqn_nstep", "dqn_dueling_nstep", "dqn_curriculum", "dqn_cnn", "dqn_rnn", "dqn_wide",
-               "ppo", "dqn_per",
+               "dqn_nstep", "dqn_dueling_nstep", "dqn_curriculum", "dqn_cnn", "dqn_rnn", "dqn_rnn_nomem",
+               "dqn_wide", "dqn_batch512", "ppo", "dqn_per",
                "dqn_mistake", "dqn_per_mistake", "dqn_5k", "dqn_mistake_5k", "dqn_10k")
 AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn_per": "DQN + PER",
                 "dqn_mistake": "DQN + mistakes", "dqn_per_mistake": "DQN + PER + mistakes",
@@ -32,7 +32,8 @@ AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn
                 "dqn_dueling": "Dueling DQN", "dqn_nstep": "DQN (3-step)",
                 "dqn_dueling_nstep": "Dueling DQN (3-step)",
                 "dqn_curriculum": "DQN + curriculum", "dqn_cnn": "DQN (CNN)",
-                "dqn_rnn": "DQN (GRU memory)", "dqn_wide": "DQN (wide MLP)", "ppo": "PPO"}
+                "dqn_rnn": "DQN (GRU memory)", "dqn_wide": "DQN (wide MLP)", "ppo": "PPO",
+                "dqn_rnn_nomem": "DQN (GRU, memory reset)", "dqn_batch512": "DQN (batch 512)"}
 # Mistake-aware variants share their base algorithm's hue (no palette hue left
 # passes the colorblind checks beside orange and aqua) and add a second
 # encoding instead: dash-dot lines, square markers and hatched bars. Shaped
@@ -45,28 +46,35 @@ AGENT_LABELS = {"random": "Random", "tabular_q": "Tabular Q", "dqn": "DQN", "dqn
 # dash-dot with short gaps, hexagon markers and circle hatching. PPO, a
 # different algorithm family, gets its own hue (the purple of dqn_10k, which
 # never shares a chart with it) plus short dashes, left-triangle markers and
-# star hatching.
+# star hatching. The memory-reset GRU (memory_vs_replay) takes the aqua of
+# dqn_per, which never shares a chart with it, with the GRU's line pattern and
+# filled-hexagon markers; the batch-512 MLP short dots-and-dashes, thin-diamond
+# markers and slanted hatching.
 AGENT_COLORS = {"random": "#8a8a85", "tabular_q": "#2a78d6", "dqn": "#eb6834", "dqn_per": "#1baf7a",
                 "dqn_mistake": "#eb6834", "dqn_per_mistake": "#1baf7a",
                 "dqn_5k": "#eb6834", "dqn_mistake_5k": "#eb6834", "dqn_10k": "#6250d6",
                 "tabular_q_shaped": "#2a78d6", "dqn_shaped": "#eb6834",
                 "dqn_dueling": "#eb6834", "dqn_nstep": "#eb6834", "dqn_dueling_nstep": "#eb6834",
                 "dqn_curriculum": "#eb6834", "dqn_cnn": "#eb6834", "dqn_wide": "#eb6834",
-                "dqn_rnn": "#eb6834", "ppo": "#6250d6"}
+                "dqn_rnn": "#eb6834", "ppo": "#6250d6", "dqn_rnn_nomem": "#1baf7a",
+                "dqn_batch512": "#eb6834"}
 AGENT_LINESTYLES = {"random": "--", "dqn_mistake": "-.", "dqn_per_mistake": "-.",
                     "dqn_mistake_5k": "-.", "tabular_q_shaped": ":", "dqn_shaped": ":",
                     "dqn_dueling": (0, (6, 2)), "dqn_nstep": (0, (1, 1)),
                     "dqn_dueling_nstep": (0, (6, 2, 1, 2, 1, 2)),
                     "dqn_curriculum": (0, (10, 3, 2, 3)), "dqn_cnn": (0, (12, 4)),
-                    "dqn_wide": (0, (1, 4)), "dqn_rnn": (0, (4, 1, 1, 1)), "ppo": (0, (3, 2))}
+                    "dqn_wide": (0, (1, 4)), "dqn_rnn": (0, (4, 1, 1, 1)), "ppo": (0, (3, 2)),
+                    "dqn_rnn_nomem": (0, (4, 1, 1, 1)), "dqn_batch512": (0, (5, 1, 1, 1, 1, 1))}
 AGENT_MARKERS = {"dqn_mistake": "s", "dqn_per_mistake": "s", "dqn_mistake_5k": "s",
                  "tabular_q_shaped": "^", "dqn_shaped": "^", "dqn_dueling": "D",
                  "dqn_nstep": "v", "dqn_dueling_nstep": "P", "dqn_curriculum": "X",
-                 "dqn_cnn": "*", "dqn_wide": "p", "dqn_rnn": "h", "ppo": "<"}
+                 "dqn_cnn": "*", "dqn_wide": "p", "dqn_rnn": "h", "ppo": "<",
+                 "dqn_rnn_nomem": "H", "dqn_batch512": "d"}
 AGENT_HATCHES = {"dqn_mistake": "///", "dqn_per_mistake": "///", "dqn_mistake_5k": "///",
                  "tabular_q_shaped": "..", "dqn_shaped": "..", "dqn_dueling": "xx",
                  "dqn_nstep": "\\\\", "dqn_dueling_nstep": "++", "dqn_curriculum": "--",
-                 "dqn_cnn": "xxx", "dqn_wide": "||", "dqn_rnn": "oo", "ppo": "**"}
+                 "dqn_cnn": "xxx", "dqn_wide": "||", "dqn_rnn": "oo", "ppo": "**",
+                 "dqn_rnn_nomem": "OO", "dqn_batch512": "//"}
 MISTAKE_TYPES = ("collision", "revisit", "hazard", "timeout")
 MISTAKE_COLORS = {"collision": "#e87ba4", "revisit": "#6250d6", "hazard": "#e34948",
                   "timeout": "#eda100"}
@@ -723,6 +731,9 @@ def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int
     ppo = load_experiment(results_dir / "ppo_generalization")
     save(experiment_curves_figure(ppo["curves"], "success"), "ppo_curves.png")
     save(experiment_bars_figure(ppo["summary"], "success"), "ppo_success.png")
+    memory = load_experiment(results_dir / "memory_vs_replay")
+    save(experiment_curves_figure(memory["curves"], "success"), "memory_replay_curves.png")
+    save(experiment_bars_figure(memory["summary"], "success"), "memory_replay_success.png")
     import csv
     with open(results_dir / "stochastic_evaluation" / "results.csv", newline="") as f:
         save(stochastic_success_figure(list(csv.DictReader(f))), "stochastic_success.png")

@@ -1,0 +1,170 @@
+Experiment memory_vs_replay: Separate memory from sequence replay: DQN (MLP 128x128, batch 64), the same MLP with batch 512, the GRU network with memory, and the same GRU network and training with its memory reset at every step; local 5x5 view, 50 fresh mazes (9900-9949), 50 held-out (10001-10050). Seeds 800-809.
+  dqn             seed 800  finished: train success 0.96
+  dqn             seed 801  finished: train success 0.96
+  dqn             seed 802  finished: train success 0.98
+  dqn             seed 803  finished: train success 1.00
+  dqn             seed 804  finished: train success 0.92
+  dqn             seed 805  finished: train success 1.00
+  dqn             seed 806  finished: train success 0.98
+  dqn             seed 807  finished: train success 0.96
+  dqn             seed 808  finished: train success 0.92
+  dqn             seed 809  finished: train success 0.92
+  dqn_batch512    seed 800  finished: train success 0.98
+  dqn_batch512    seed 801  finished: train success 0.00
+  dqn_batch512    seed 802  finished: train success 0.96
+  dqn_batch512    seed 803  finished: train success 1.00
+  dqn_batch512    seed 804  finished: train success 0.98
+  dqn_batch512    seed 805  finished: train success 0.98
+  dqn_batch512    seed 806  finished: train success 0.98
+  dqn_batch512    seed 807  finished: train success 0.00
+  dqn_batch512    seed 808  finished: train success 0.92
+  dqn_batch512    seed 809  finished: train success 0.00
+  dqn_rnn         seed 800  finished: train success 0.98
+  dqn_rnn         seed 801  finished: train success 1.00
+  dqn_rnn         seed 802  finished: train success 0.98
+  dqn_rnn         seed 803  finished: train success 1.00
+  dqn_rnn         seed 804  finished: train success 1.00
+  dqn_rnn         seed 805  finished: train success 1.00
+  dqn_rnn         seed 806  finished: train success 1.00
+  dqn_rnn         seed 807  finished: train success 1.00
+  dqn_rnn         seed 808  finished: train success 1.00
+  dqn_rnn         seed 809  finished: train success 1.00
+  dqn_rnn_nomem   seed 800  finished: train success 0.98
+  dqn_rnn_nomem   seed 801  finished: train success 0.98
+  dqn_rnn_nomem   seed 802  finished: train success 0.98
+  dqn_rnn_nomem   seed 803  finished: train success 0.30
+  dqn_rnn_nomem   seed 804  finished: train success 0.98
+  dqn_rnn_nomem   seed 805  finished: train success 0.96
+  dqn_rnn_nomem   seed 806  finished: train success 1.00
+  dqn_rnn_nomem   seed 807  finished: train success 1.00
+  dqn_rnn_nomem   seed 808  finished: train success 0.90
+  dqn_rnn_nomem   seed 809  finished: train success 1.00
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent           split    seeds             success     path_efficiency               steps            mistakes             hazards
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.96 +/- 0.02       0.96 +/- 0.02      17.79 +/- 1.82       3.83 +/- 2.10       0.00 +/- 0.00
+dqn             unseen      10       0.70 +/- 0.03       0.69 +/- 0.03      38.89 +/- 2.76      27.98 +/- 3.19       0.00 +/- 0.00
+dqn_batch512    train       10       0.68 +/- 0.34       0.68 +/- 0.33     41.80 +/- 28.76     31.35 +/- 33.02       0.00 +/- 0.00
+dqn_batch512    unseen      10       0.47 +/- 0.24       0.46 +/- 0.24     59.25 +/- 21.00     51.37 +/- 24.34       0.00 +/- 0.00
+dqn_rnn         train       10       1.00 +/- 0.01       0.99 +/- 0.01      14.91 +/- 0.50       0.36 +/- 0.54       0.00 +/- 0.00
+dqn_rnn         unseen      10       0.88 +/- 0.03       0.86 +/- 0.03      24.50 +/- 2.35      11.43 +/- 2.70       0.00 +/- 0.00
+dqn_rnn_nomem   train       10       0.91 +/- 0.15       0.90 +/- 0.15     22.20 +/- 13.11      8.86 +/- 14.82       0.00 +/- 0.00
+dqn_rnn_nomem   unseen      10       0.70 +/- 0.13       0.69 +/- 0.13     39.73 +/- 11.59     28.97 +/- 13.32       0.00 +/- 0.00
+
+Episode reward, steps to goal (successful episodes only) and mistake types:
+agent           split    seeds        total_reward       steps_to_goal         hazard_rate          collisions            revisits
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.69 +/- 0.10      14.36 +/- 0.12       0.00 +/- 0.00       0.36 +/- 0.55       3.43 +/- 1.76
+dqn             unseen      10      -0.39 +/- 0.16      13.19 +/- 0.20       0.00 +/- 0.00       4.00 +/- 2.46      23.69 +/- 3.39
+dqn_batch512    train       10      -1.10 +/- 2.12      14.41 +/- 0.10       0.00 +/- 0.00     23.76 +/- 27.25       7.28 +/- 6.39
+dqn_batch512    unseen      10      -1.97 +/- 1.70      13.31 +/- 0.20       0.00 +/- 0.00     26.00 +/- 25.19      24.84 +/- 5.90
+dqn_rnn         train       10       0.84 +/- 0.02      14.57 +/- 0.06       0.00 +/- 0.00       0.00 +/- 0.01       0.35 +/- 0.53
+dqn_rnn         unseen      10       0.30 +/- 0.15      13.99 +/- 0.21       0.00 +/- 0.00       3.24 +/- 2.00       8.06 +/- 2.07
+dqn_rnn_nomem   train       10       0.42 +/- 0.77      14.23 +/- 0.31       0.00 +/- 0.00       2.63 +/- 5.94       6.14 +/- 8.82
+dqn_rnn_nomem   unseen      10      -0.40 +/- 0.68      13.31 +/- 0.38       0.00 +/- 0.00       3.27 +/- 5.19      25.39 +/- 8.12
+steps_to_goal leaves out seeds that never reached the goal: dqn_batch512/train: 7 of 10 seeds, dqn_batch512/unseen: 7 of 10 seeds
+
+Success-rate differences (permutation test):
+  [train] dqn_batch512 - dqn: -0.28  (p = 0.179)
+           dqn_batch512 vs Neural Ned on success: difference -0.28, p = 0.179. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_rnn - dqn: +0.04  (p = 0.004)
+           Neural Ned (Remembers) beats Neural Ned on success (p = 0.004). Not a fluke.
+  [train] dqn_rnn_nomem - dqn: -0.05  (p = 0.886)
+           Neural Ned (Remembers Nothing) vs Neural Ned on success: difference -0.05, p = 0.886. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_rnn - dqn_batch512: +0.32  (p = 0.002)
+           Neural Ned (Remembers) beats dqn_batch512 on success (p = 0.002). Not a fluke.
+  [train] dqn_rnn_nomem - dqn_batch512: +0.23  (p = 0.144)
+           Neural Ned (Remembers Nothing) vs dqn_batch512 on success: difference +0.23, p = 0.144. The jury is still out; more seeds needed before anyone gloats.
+  [train] dqn_rnn_nomem - dqn_rnn: -0.09  (p = 0.031)
+           Neural Ned (Remembers) beats Neural Ned (Remembers Nothing) on success (p = 0.031). Not a fluke.
+  [unseen] dqn_batch512 - dqn: -0.23  (p = 0.061)
+           dqn_batch512 vs Neural Ned on success: difference -0.23, p = 0.061. The jury is still out; more seeds needed before anyone gloats.
+  [unseen] dqn_rnn - dqn: +0.17  (p < 0.001)
+           Neural Ned (Remembers) beats Neural Ned on success (p < 0.001). Not a fluke.
+  [unseen] dqn_rnn_nomem - dqn: -0.01  (p = 0.986)
+           Neural Ned (Remembers Nothing) vs Neural Ned on success: difference -0.01, p = 0.986. The jury is still out; more seeds needed before anyone gloats.
+  [unseen] dqn_rnn - dqn_batch512: +0.41  (p < 0.001)
+           Neural Ned (Remembers) beats dqn_batch512 on success (p < 0.001). Not a fluke.
+  [unseen] dqn_rnn_nomem - dqn_batch512: +0.23  (p = 0.084)
+           Neural Ned (Remembers Nothing) vs dqn_batch512 on success: difference +0.23, p = 0.084. The jury is still out; more seeds needed before anyone gloats.
+  [unseen] dqn_rnn_nomem - dqn_rnn: -0.18  (p < 0.001)
+           Neural Ned (Remembers) beats Neural Ned (Remembers Nothing) on success (p < 0.001). Not a fluke.
+
+Learning speed: greedy success averaged over training checkpoints (permutation test):
+  dqn_batch512 0.588 vs dqn 0.886: difference -0.298  (p = 0.038)
+  dqn_rnn 0.973 vs dqn 0.886: difference +0.087  (p < 0.001)
+  dqn_rnn_nomem 0.819 vs dqn 0.886: difference -0.068  (p = 0.611)
+  dqn_rnn 0.973 vs dqn_batch512 0.588: difference +0.385  (p < 0.001)
+  dqn_rnn_nomem 0.819 vs dqn_batch512 0.588: difference +0.231  (p = 0.136)
+  dqn_rnn_nomem 0.819 vs dqn_rnn 0.973: difference -0.155  (p < 0.001)
+
+Other differences (permutation test):
+  [train] total_reward  dqn_batch512 - dqn: -1.795  (p = 0.170)
+  [train] total_reward  dqn_rnn - dqn: +0.148  (p = 0.002)
+  [train] total_reward  dqn_rnn_nomem - dqn: -0.269  (p = 0.873)
+  [train] total_reward  dqn_rnn - dqn_batch512: +1.943  (p = 0.001)
+  [train] total_reward  dqn_rnn_nomem - dqn_batch512: +1.526  (p = 0.130)
+  [train] total_reward  dqn_rnn_nomem - dqn_rnn: -0.417  (p = 0.018)
+  [unseen] total_reward  dqn_batch512 - dqn: -1.584  (p = 0.062)
+  [unseen] total_reward  dqn_rnn - dqn: +0.685  (p < 0.001)
+  [unseen] total_reward  dqn_rnn_nomem - dqn: -0.015  (p = 0.993)
+  [unseen] total_reward  dqn_rnn - dqn_batch512: +2.270  (p < 0.001)
+  [unseen] total_reward  dqn_rnn_nomem - dqn_batch512: +1.569  (p = 0.082)
+  [unseen] total_reward  dqn_rnn_nomem - dqn_rnn: -0.701  (p < 0.001)
+  [train] steps_to_goal dqn_batch512 - dqn: +0.047  (p = 0.518)
+  [train] steps_to_goal dqn_rnn - dqn: +0.208  (p = 0.003)
+  [train] steps_to_goal dqn_rnn_nomem - dqn: -0.128  (p = 0.508)
+  [train] steps_to_goal dqn_rnn - dqn_batch512: +0.161  (p = 0.005)
+  [train] steps_to_goal dqn_rnn_nomem - dqn_batch512: -0.175  (p = 0.396)
+  [train] steps_to_goal dqn_rnn_nomem - dqn_rnn: -0.335  (p = 0.002)
+  [unseen] steps_to_goal dqn_batch512 - dqn: +0.125  (p = 0.336)
+  [unseen] steps_to_goal dqn_rnn - dqn: +0.807  (p < 0.001)
+  [unseen] steps_to_goal dqn_rnn_nomem - dqn: +0.121  (p = 0.564)
+  [unseen] steps_to_goal dqn_rnn - dqn_batch512: +0.682  (p < 0.001)
+  [unseen] steps_to_goal dqn_rnn_nomem - dqn_batch512: -0.004  (p = 0.987)
+  [unseen] steps_to_goal dqn_rnn_nomem - dqn_rnn: -0.686  (p = 0.001)
+  [train] hazards       dqn_batch512 - dqn: +0.000  (p = 1.000)
+  [train] hazards       dqn_rnn - dqn: +0.000  (p = 1.000)
+  [train] hazards       dqn_rnn_nomem - dqn: +0.000  (p = 1.000)
+  [train] hazards       dqn_rnn - dqn_batch512: +0.000  (p = 1.000)
+  [train] hazards       dqn_rnn_nomem - dqn_batch512: +0.000  (p = 1.000)
+  [train] hazards       dqn_rnn_nomem - dqn_rnn: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_batch512 - dqn: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_rnn - dqn: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_rnn_nomem - dqn: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_rnn - dqn_batch512: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_rnn_nomem - dqn_batch512: +0.000  (p = 1.000)
+  [unseen] hazards       dqn_rnn_nomem - dqn_rnn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_batch512 - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_rnn - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_rnn_nomem - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_rnn - dqn_batch512: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_rnn_nomem - dqn_batch512: +0.000  (p = 1.000)
+  [train] hazard_rate   dqn_rnn_nomem - dqn_rnn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_batch512 - dqn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_rnn - dqn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_rnn_nomem - dqn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_rnn - dqn_batch512: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_rnn_nomem - dqn_batch512: +0.000  (p = 1.000)
+  [unseen] hazard_rate   dqn_rnn_nomem - dqn_rnn: +0.000  (p = 1.000)
+  [train] collisions    dqn_batch512 - dqn: +23.392  (p = 0.176)
+  [train] collisions    dqn_rnn - dqn: -0.360  (p = 0.482)
+  [train] collisions    dqn_rnn_nomem - dqn: +2.264  (p = 1.000)
+  [train] collisions    dqn_rnn - dqn_batch512: -23.752  (p = 0.087)
+  [train] collisions    dqn_rnn_nomem - dqn_batch512: -21.128  (p = 0.142)
+  [train] collisions    dqn_rnn_nomem - dqn_rnn: +2.624  (p = 1.000)
+  [unseen] collisions    dqn_batch512 - dqn: +22.006  (p = 0.086)
+  [unseen] collisions    dqn_rnn - dqn: -0.752  (p = 0.599)
+  [unseen] collisions    dqn_rnn_nomem - dqn: -0.724  (p = 0.875)
+  [unseen] collisions    dqn_rnn - dqn_batch512: -22.758  (p = 0.059)
+  [unseen] collisions    dqn_rnn_nomem - dqn_batch512: -22.730  (p = 0.077)
+  [unseen] collisions    dqn_rnn_nomem - dqn_rnn: +0.028  (p = 0.994)
+
+Replay buffer at the end of training (transitions; mean over seeds):
+  dqn             added    106567  main overwrote     86567
+  dqn_batch512    added    167094  main overwrote    147094
+  dqn_rnn         added    103790  main overwrote     83790
+  dqn_rnn_nomem   added    124890  main overwrote    104890
+
+Files written to runs\experiments_memory_replay\memory_vs_replay

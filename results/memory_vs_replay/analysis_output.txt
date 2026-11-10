@@ -1,0 +1,77 @@
+Primary (Holm over H1-H3), held-out greedy success:
+H1 memory itself: dqn_rnn 0.878 vs dqn_rnn_nomem 0.696  diff +0.182  p 0.0000  higher/tied/lower 10/0/0
+H2 more steps per update (MLP): dqn_batch512 0.470 vs dqn 0.704  diff -0.234  p 0.0605  higher/tied/lower 3/1/6
+H3 Stage F replication: dqn_rnn 0.878 vs dqn 0.704  diff +0.174  p 0.0000  higher/tied/lower 10/0/0
+Holm-adjusted (H1, H2, H3): [0.0, 0.0605, 0.0]
+
+Exploratory: other held-out success pairs:
+  held-out success: dqn_rnn_nomem 0.696 vs dqn 0.704  diff -0.008  p 0.9860  higher/tied/lower 6/1/3
+  held-out success: dqn_rnn_nomem 0.696 vs dqn_batch512 0.470  diff +0.226  p 0.0837  higher/tied/lower 8/1/1
+  held-out success: dqn_rnn 0.878 vs dqn_batch512 0.470  diff +0.408  p 0.0000  higher/tied/lower 10/0/0
+
+Exploratory: primary pairs on other measures:
+  learning speed (H1 memory itself): dqn_rnn 0.973 vs dqn_rnn_nomem 0.819  diff +0.155  p 0.0005  higher/tied/lower 9/0/1
+  final train success (H1 memory itself): dqn_rnn 0.996 vs dqn_rnn_nomem 0.908  diff +0.088  p 0.0311  higher/tied/lower 5/5/0
+  held-out revisits (H1 memory itself): dqn_rnn 8.060 vs dqn_rnn_nomem 25.390  diff -17.330  p 0.0000  higher/tied/lower 0/0/10
+  held-out revisit_rate (H1 memory itself): dqn_rnn 0.324 vs dqn_rnn_nomem 0.633  diff -0.309  p 0.0000  higher/tied/lower 0/0/10
+  held-out steps (H1 memory itself): dqn_rnn 24.496 vs dqn_rnn_nomem 39.732  diff -15.236  p 0.0000  higher/tied/lower 0/0/10
+  held-out timeout (H1 memory itself): dqn_rnn 0.122 vs dqn_rnn_nomem 0.304  diff -0.182  p 0.0000  higher/tied/lower 0/0/10
+  held-out collisions (H1 memory itself): dqn_rnn 3.244 vs dqn_rnn_nomem 3.272  diff -0.028  p 0.9938  higher/tied/lower 9/0/1
+  held-out path_efficiency (H1 memory itself): dqn_rnn 0.857 vs dqn_rnn_nomem 0.688  diff +0.168  p 0.0000  higher/tied/lower 10/0/0
+  learning speed (H2 more steps per update (MLP)): dqn_batch512 0.588 vs dqn 0.886  diff -0.298  p 0.0371  higher/tied/lower 4/0/6
+  final train success (H2 more steps per update (MLP)): dqn_batch512 0.680 vs dqn 0.960  diff -0.280  p 0.1752  higher/tied/lower 2/3/5
+  held-out revisits (H2 more steps per update (MLP)): dqn_batch512 24.840 vs dqn 23.686  diff +1.154  p 0.7136  higher/tied/lower 6/0/4
+  held-out revisit_rate (H2 more steps per update (MLP)): dqn_batch512 0.504 vs dqn 0.606  diff -0.103  p 0.1841  higher/tied/lower 5/0/5
+  held-out steps (H2 more steps per update (MLP)): dqn_batch512 59.252 vs dqn 38.892  diff +20.360  p 0.0552  higher/tied/lower 7/0/3
+  held-out timeout (H2 more steps per update (MLP)): dqn_batch512 0.530 vs dqn 0.296  diff +0.234  p 0.0605  higher/tied/lower 6/1/3
+  held-out collisions (H2 more steps per update (MLP)): dqn_batch512 26.002 vs dqn 3.996  diff +22.006  p 0.0847  higher/tied/lower 6/0/4
+  held-out path_efficiency (H2 more steps per update (MLP)): dqn_batch512 0.465 vs dqn 0.695  diff -0.230  p 0.0597  higher/tied/lower 4/0/6
+  learning speed (H3 Stage F replication): dqn_rnn 0.973 vs dqn 0.886  diff +0.087  p 0.0000  higher/tied/lower 10/0/0
+  final train success (H3 Stage F replication): dqn_rnn 0.996 vs dqn 0.960  diff +0.036  p 0.0037  higher/tied/lower 7/3/0
+  held-out revisits (H3 Stage F replication): dqn_rnn 8.060 vs dqn 23.686  diff -15.626  p 0.0000  higher/tied/lower 0/0/10
+  held-out revisit_rate (H3 Stage F replication): dqn_rnn 0.324 vs dqn 0.606  diff -0.283  p 0.0000  higher/tied/lower 1/0/9
+  held-out steps (H3 Stage F replication): dqn_rnn 24.496 vs dqn 38.892  diff -14.396  p 0.0000  higher/tied/lower 0/0/10
+  held-out timeout (H3 Stage F replication): dqn_rnn 0.122 vs dqn 0.296  diff -0.174  p 0.0000  higher/tied/lower 0/0/10
+  held-out collisions (H3 Stage F replication): dqn_rnn 3.244 vs dqn 3.996  diff -0.752  p 0.6003  higher/tied/lower 5/0/5
+  held-out path_efficiency (H3 Stage F replication): dqn_rnn 0.857 vs dqn 0.695  diff +0.162  p 0.0000  higher/tied/lower 10/0/0
+
+Summary (mean +/- CI over seeds):
+  [unseen] dqn           success 0.704+/-0.033  path_efficiency 0.695+/-0.031  steps 38.892+/-2.759  timeout 0.296+/-0.033  collisions 3.996+/-2.464  revisits 23.686+/-3.393  revisit_rate 0.606+/-0.063  total_reward -0.388+/-0.164
+  [unseen] dqn_batch512  success 0.470+/-0.242  path_efficiency 0.465+/-0.240  steps 59.252+/-21.000  timeout 0.530+/-0.242  collisions 26.002+/-25.190  revisits 24.840+/-5.899  revisit_rate 0.504+/-0.154  total_reward -1.972+/-1.702
+  [unseen] dqn_rnn       success 0.878+/-0.029  path_efficiency 0.857+/-0.027  steps 24.496+/-2.345  timeout 0.122+/-0.029  collisions 3.244+/-2.003  revisits 8.060+/-2.067  revisit_rate 0.324+/-0.066  total_reward 0.297+/-0.154
+  [unseen] dqn_rnn_nomem success 0.696+/-0.134  path_efficiency 0.688+/-0.133  steps 39.732+/-11.587  timeout 0.304+/-0.134  collisions 3.272+/-5.185  revisits 25.390+/-8.119  revisit_rate 0.633+/-0.028  total_reward -0.403+/-0.681
+  [train] dqn           success 0.960+/-0.022  path_efficiency 0.956+/-0.023  steps 17.788+/-1.823  timeout 0.040+/-0.022  collisions 0.364+/-0.549  revisits 3.430+/-1.756  revisit_rate 0.179+/-0.083  total_reward 0.691+/-0.096
+  [train] dqn_batch512  success 0.680+/-0.336  path_efficiency 0.677+/-0.335  steps 41.796+/-28.757  timeout 0.320+/-0.336  collisions 23.756+/-27.251  revisits 7.278+/-6.391  revisit_rate 0.150+/-0.061  total_reward -1.103+/-2.125
+  [train] dqn_rnn       success 0.996+/-0.006  path_efficiency 0.989+/-0.009  steps 14.908+/-0.498  timeout 0.004+/-0.006  collisions 0.004+/-0.009  revisits 0.352+/-0.531  revisit_rate 0.022+/-0.033  total_reward 0.839+/-0.023
+  [train] dqn_rnn_nomem success 0.908+/-0.154  path_efficiency 0.905+/-0.154  steps 22.204+/-13.110  timeout 0.092+/-0.154  collisions 2.628+/-5.945  revisits 6.142+/-8.821  revisit_rate 0.166+/-0.132  total_reward 0.423+/-0.771
+  [unseen] dqn           per seed [0.72, 0.66, 0.74, 0.7, 0.66, 0.8, 0.7, 0.7, 0.72, 0.64]
+  [speed]  dqn           0.886+/-0.017
+  [unseen] dqn_batch512  per seed [0.76, 0.0, 0.66, 0.74, 0.66, 0.7, 0.76, 0.0, 0.42, 0.0]
+  [speed]  dqn_batch512  0.588+/-0.300
+  [unseen] dqn_rnn       per seed [0.84, 0.9, 0.82, 0.88, 0.84, 0.86, 0.94, 0.94, 0.88, 0.88]
+  [speed]  dqn_rnn       0.973+/-0.017
+  [unseen] dqn_rnn_nomem per seed [0.76, 0.72, 0.74, 0.18, 0.76, 0.78, 0.82, 0.8, 0.64, 0.76]
+  [speed]  dqn_rnn_nomem 0.819+/-0.199
+
+Curve (mean greedy train success per eval point):
+  dqn           0:0.00  500:0.71  1000:0.84  1500:0.92  2000:0.93  2500:0.96  3000:0.96
+  dqn_batch512  0:0.00  500:0.40  1000:0.52  1500:0.63  2000:0.63  2500:0.67  3000:0.68
+  dqn_rnn       0:0.00  500:0.90  1000:0.99  1500:1.00  2000:1.00  2500:0.95  3000:1.00
+  dqn_rnn_nomem 0:0.00  500:0.65  1000:0.76  1500:0.83  2000:0.87  2500:0.89  3000:0.91
+
+Compute: env steps, updates and wall-clock per run (config.json to final_eval.json):
+  dqn           mean env steps 106,567, minutes per run 7.4 (min 5.8, max 10.4)
+  dqn_batch512  mean env steps 167,094, minutes per run 14.4 (min 8.6, max 25.3)
+  dqn_rnn       mean env steps 103,790, minutes per run 56.9 (min 11.9, max 97.3)
+  dqn_rnn_nomem mean env steps 124,890, minutes per run 35.7 (min 8.9, max 56.1)
+
+Secondary (pre-specified, exploratory): held-out success with epsilon = 0.05
+(5 passes, evaluation seed 20,000 + run seed; greedy re-checked against saved results)
+  dqn           0.768+/-0.025  per seed [0.804, 0.736, 0.748, 0.768, 0.716, 0.816, 0.78, 0.784, 0.804, 0.724]
+  dqn_batch512  0.531+/-0.264  per seed [0.804, 0.004, 0.76, 0.816, 0.772, 0.748, 0.796, 0.0, 0.6, 0.008]
+  dqn_rnn       0.897+/-0.027  per seed [0.872, 0.932, 0.86, 0.884, 0.844, 0.884, 0.948, 0.96, 0.88, 0.904]
+  dqn_rnn_nomem 0.759+/-0.125  per seed [0.796, 0.808, 0.792, 0.268, 0.816, 0.844, 0.856, 0.832, 0.748, 0.832]
+  eps 0.05 H1 memory itself: dqn_rnn 0.897 vs dqn_rnn_nomem 0.759  diff +0.138  p 0.0000  higher/tied/lower 10/0/0
+  eps 0.05 H2 more steps per update (MLP): dqn_batch512 0.531 vs dqn 0.768  diff -0.237  p 0.0746  higher/tied/lower 4/1/5
+  eps 0.05 H3 Stage F replication: dqn_rnn 0.897 vs dqn 0.768  diff +0.129  p 0.0000  higher/tied/lower 10/0/0
+  eps 0.05 nomem vs dqn: dqn_rnn_nomem 0.759 vs dqn 0.768  diff -0.009  p 0.9950  higher/tied/lower 7/0/3

@@ -37,6 +37,7 @@ TAGLINES: Dict[str, str] = {
     "dqn_dueling_nstep": "Two heads, three steps of patience.",
     "dqn_cnn": "Knows a dead end when it sees one, wherever it sees it.",
     "dqn_rnn": "Remembers where it has been. Mostly.",
+    "dqn_rnn_nomem": "Has the brain for a memory, wipes it every step on principle.",
     "ppo": "Skips the spreadsheet of values and just plays the odds.",
 }
 

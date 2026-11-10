@@ -2,6 +2,18 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Memory vs sequence replay (Stage L)
+
+Stage F's memory network was also trained differently (runs of 16 consecutive steps, 8× as many trained steps per update), and Stage F could not say which of the two explained its gain. This stage separates them.
+
+**Added**
+- `DQNConfig.reset_memory_every_step` and `RecurrentQNetwork(reset_every_step=True)`: the GRU starts from a zero memory at every step (when acting, during burn-in, in training and in the targets), so each answer depends on the current observation alone. Layers, initial weights, sequence replay, burn-in, batch and update schedule are those of the network with memory. It needs a recurrent agent; checkpoints with and without it refuse to load into each other, and older recurrent checkpoints still load.
+- Agent `dqn_rnn_nomem` (109,572 weights, the same as `dqn_rnn`) with a nickname, tagline and chart style (aqua, the GRU's line pattern).
+- Experiment `memory_vs_replay`, pre-registered in `results/memory_vs_replay/PROTOCOL.md` with its analysis script `analyze.py` written before the run: arms `dqn`, `dqn_batch512` (the same MLP, batch 512), `dqn_rnn` and `dqn_rnn_nomem`; fresh seeds 800–809 and layouts (9900–9949 training, 10001–10050 held-out; 10000 duplicated a training maze). Results, `analysis_output.txt`, `eps005.json` (pre-specified ε = 0.05 secondary evaluation), `ANALYSIS.md`, all 40 trained networks in `models/` (11.1 MB, each checked to reproduce its saved results), two figures (`memory_replay_curves.png`, `memory_replay_success.png`), notebook cells, README section and REPORT section 6.15 and finding 14.
+- 6 tests (315 in total): the reset network answering each step from its observation alone (no gradient to earlier steps, the given memory ignored) and matching the memory network on the first step, `dqn_rnn_nomem` being `dqn_rnn` with only the option changed (same settings and initial weights; acting leaves no trace), refusing the option without a recurrent network, training and exact checkpoint round-trips (a memory network refuses the control's checkpoint), older recurrent checkpoints loading, and the protocol's settings and duplicate-free layouts. Existing agents are unchanged: 300 episodes of `rnn_generalization` DQN seed 600 and 150 of `dqn_rnn` seed 600 reproduce their saved logs exactly.
+
+**Result** (pre-registered, Holm-corrected): with its memory reset at every step, the GRU network solved 0.70 of held-out mazes against 0.88 with memory (p < 0.001, behind in all 10 seeds), the same as the standard MLP (0.70), so the Stage F gain is the memory, not the sequence training. The MLP with batch 512 was not better than batch 64 (0.47 vs 0.70, p = 0.061; three of its ten runs never learned). The GRU again beat the standard MLP with fresh seeds and mazes (0.88 vs 0.70, p < 0.001, 10/10). The same held with ε = 0.05 in play. The run was stopped twice at the owner's request and resumed with the same command; `run.log` was regenerated afterwards (outputs byte-identical).
+
 ## Stochastic evaluation of saved networks (Stage K)
 
 Every earlier result was greedy, and Stage I found (exploratory) that PPO did far better when it sampled its moves, while DQN had never been evaluated with any randomness. This stage re-evaluates saved networks instead of training new ones.
