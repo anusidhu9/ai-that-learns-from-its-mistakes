@@ -2,6 +2,19 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Final documentation pass (Stage J)
+
+After 17 studies the README's findings had grown into a 15-bullet list and parts of the report still described the project as it was several stages earlier. No code, experiment or result changed.
+
+**Changed**
+- README: a new intro, six **Main findings**, and an **Every study at a glance** table (question, result, verdict, link; pre-registered studies marked) before the baseline table; the long list of findings it replaces is now covered by the table and the per-study sections ("The studies in detail"). The agents list, limitations and the quick test's timing were updated.
+- REPORT: the summary lists the 17 studies by group; Section 2 lists every stage and explains the pre-registration practice; Section 4 describes the two Stage L controls; Section 5 explains Holm correction and the paired test and has an index of every pre-registered study with its seeds and mazes.
+- `requirements.txt`: `gradio>=6.0` (the dashboard passes theme, css and js to `launch()`, which earlier versions reject), and a note of the versions the results were produced with.
+- Notebook: an updated overview, a one-paragraph summary of the later studies before their cells, and ids for the two cells that had none (the notebook now validates with `nbformat`). Every code cell except setup, tests and the dashboard was run locally without errors.
+- `results/rnn_generalization`, `ppo_generalization` and `cnn_generalization` `ANALYSIS.md`: a dated "Later result" note at the end pointing to the study that answered each one's open question (memory vs replay, stochastic evaluation, the wide-network retest). The original text is unchanged.
+
+**Checked**: every relative link and image in the 29 Markdown files, every in-page anchor, the headline numbers of the report's findings against each study's `ANALYSIS.md` and `summary.csv`, and the test count (330).
+
 ## Play it yourself, and replay controls (Stage M)
 
 The studies showed that a local-view agent without memory loops because one 5 × 5 window can't tell it where it has been. This stage lets people feel that for themselves and look at the agent's choices more closely. No experiment, agent or result changes.

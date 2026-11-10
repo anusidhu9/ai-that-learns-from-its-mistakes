@@ -10,15 +10,43 @@
 
 Reinforcement-learning agents explore grid worlds, get **rewarded** for reaching the goal and **penalised** for mistakes (hitting walls, stepping on hazards, revisiting cells, running out of time), and are then tested to see whether they actually got better. Everything runs on a free CPU: Google Colab or a laptop.
 
-The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN), DQN with prioritized experience replay and DQN with an explicit memory of its mistakes across seven experiments, 5–10 seeds each, with greedy evaluation, 95% confidence intervals and permutation tests. It includes an interactive **Gradio dashboard** and a mildly sarcastic commentator.
+The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN) and eight variations of it (prioritized replay, an explicit memory of its mistakes, reward shaping, dueling heads, 3-step returns, a curriculum, a convolutional network, a recurrent network with memory) and PPO, in 17 studies with 5–10 seeds per agent, greedy evaluation, 95% confidence intervals and permutation tests. The last 11 studies were **pre-registered**: their hypotheses, seeds and mazes were written down before they ran. It includes an interactive **Gradio dashboard** where you can train agents, watch them, and play the mazes yourself, plus a mildly sarcastic commentator.
 
 ![Mistakes at each cell early vs late in training](docs/figures/mistake_heatmap.png)
 
 *Tabular Q-learning on the fixed maze (one seed). In its first 50 episodes the agent made 74.6 mistakes per episode, concentrated in the dead-end corridor below the start. By the last 50 it made 0.6.*
 
-## Results at a glance
+## Main findings
 
-All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% confidence interval. The full analysis is in [REPORT.md](REPORT.md).
+1. **The agents learn from their mistakes.** Tabular Q-learning and DQN beat random on every fixed layout, and on two of them both take the shortest path with zero mistakes in every seed (in the run pictured above, mistakes fell from 74.6 per episode to 0.6).
+2. **Fewer mistakes is not the same as success.** When a hazard ended the episode, DQN learned to walk into the nearest one: a quick death cost less than a long search.
+3. **On mazes it has never seen, what matters is memory.** With a 5 × 5 view the agent can't tell where it has been and loops until time runs out. A DQN with a GRU memory solved 0.73 of new mazes against 0.29, and a follow-up showed the gain comes from the memory itself, not from how that network is trained.
+4. **Most training tricks sped up learning but did not help on new mazes.** Reward shaping and 3-step returns made DQN learn a maze much faster; neither they, nor a curriculum, a convolutional network or replaying mistakes, measurably improved success on mazes it had never seen.
+5. **Greedy evaluation understates every agent.** One random move in twenty raised every saved network's success on new mazes; the random moves break the loops.
+6. **PPO generalised slightly better than DQN** (0.69 vs 0.64) **but learned more slowly**, a small result that would need replicating.
+
+## Every study at a glance
+
+| Study | Question | Result | Verdict |
+|---|---|---|---|
+| [Fixed layouts](#baseline-experiments) (4 experiments) | Do the agents learn from their mistakes? | Tabular Q 1.00, DQN 0.90–1.00 vs random 0.00–0.40 | **Yes** (p ≤ 0.008) |
+| [`terminal_hazards`](#baseline-experiments) | Can fewer mistakes mean worse behaviour? | DQN walked into a hazard in 4 of 5 seeds; success 0.20 vs 1.00 for tabular Q | **Yes** (p = 0.048) |
+| [`generalization`](#baseline-experiments) | DQN or tabular Q on unseen mazes? | 0.45 vs 0.34 | **DQN** (p = 0.003) |
+| [`mistakes_hazard_maze`, `long_memory_mistakes`](#replaying-mistakes-explicitly) ⓟ | Does replaying mistakes help? | held-out 0.30 vs 0.37 | No evidence (p = 0.082) |
+| [`shaping_speed`, `shaping_generalization`](#reward-shaping) ⓟ | Does a hint toward the goal help? | faster: DQN 0.79 vs 0.39; held-out 0.54 vs 0.48 | **Faster** (p = 0.002); held-out no evidence (p = 0.37) |
+| [`dqn_variants_*`](#dueling-and-n-step-dqn) ⓟ | Do dueling heads or 3-step returns help? | 3-step faster: 0.86 vs 0.37; held-out +0.03 | **3-step faster** (p = 0.0003); held-out no evidence |
+| [`curriculum_generalization`](#training-curriculum) ⓟ | Do easy mazes first help? | slower: 0.72 vs 0.85; held-out 0.49 vs 0.57 | **Slower** (p = 0.0003); held-out no evidence |
+| [`cnn_generalization`](#convolutional-q-network) ⓟ | Does a convolutional network help? | held-out 0.27 vs 0.33 | No evidence (p = 0.55) |
+| [`rnn_generalization`](#recurrent-q-network-memory) ⓟ | Does a memory help? | held-out 0.73 vs 0.29 | **Yes** (p = 0.0004, 10/10 seeds) |
+| [`ppo_generalization`](#ppo-a-policy-learner) ⓟ | PPO or DQN? | held-out 0.69 vs 0.64; slower to learn | **PPO slightly better** (p = 0.037), **slower** (p = 0.0003) |
+| [`stochastic_evaluation`](#greedy-vs-a-little-randomness) ⓟ | Does a little randomness in play change results? | plain DQN 0.42 → 0.55, all 30 networks up | **Yes** (p < 0.001) |
+| [`memory_vs_replay`](#memory-or-sequence-replay) ⓟ | Is it the memory or the training? | memory 0.88 vs memory reset 0.70 (= plain DQN) | **The memory** (p < 0.001, 10/10 seeds) |
+
+*Greedy success rates, mean over seeds. "Held-out" means mazes never seen in training. ⓟ = pre-registered; p-values in those studies are Holm-corrected. Full analysis: [REPORT.md](REPORT.md).*
+
+## Baseline experiments
+
+All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% confidence interval.
 
 | Experiment | Random | Tabular Q | DQN | DQN + PER |
 |---|---|---|---|---|
@@ -37,26 +65,20 @@ All numbers are **greedy** (exploration off), averaged across seeds, ± a 95% co
 - **But DQN is less reliable.** One of DQN's 10 hazard-maze runs solved the maze from episode 150 to 350, then unlearned it and ended the run walking into a wall, and one DQN + PER run on `fixed_maze` never solved its maze at all. Tabular Q reached the goal in all 25 of its fixed-layout runs.
 - **DQN generalizes better to mazes it has never seen.** Trained on 50 mazes and tested on 50 new ones, DQN reached the goal in 45% of unseen mazes against 34% for tabular Q (p = 0.003), and was ahead in 9 of 10 seeds. Its successes on new mazes were near-shortest paths (path efficiency 0.45 vs 0.15, p < 0.001), while tabular Q's were mostly long wanders. On the training mazes the two were level (0.75 vs 0.73, p = 0.56).
 - **Prioritized replay did not help** on these small tasks.
-- **A hint toward the goal speeds up learning.** With potential-based reward shaping, tabular Q and DQN learned a fresh maze sooner (pre-registered, p = 0.002 each after correction). It did not measurably help DQN on new mazes (0.54 vs 0.48, p = 0.366). See [below](#reward-shaping).
-- **3-step returns made DQN learn a maze much faster; dueling heads didn't help.** On a fresh maze, 3-step DQN's learning speed was 0.86 against 0.37 (pre-registered, p = 0.0003 after correction, ahead in all 10 seeds). Neither change measurably helped on new mazes. See [below](#dueling-and-n-step-dqn).
-- **Training on easy mazes first made DQN learn more slowly.** With the same 50 mazes in easiest-first order, DQN learned them more slowly (0.72 vs 0.85, pre-registered, p = 0.0003 after correction, behind in all 10 seeds). On new mazes it was 0.49 vs 0.57, not a significant difference (p = 0.093). See [below](#training-curriculum).
-- **A convolutional network didn't help on new mazes.** With 3×3 convolutions over its 5×5 view, DQN solved 0.27 of new mazes against 0.33 for the standard network, and learned no faster (pre-registered, p = 0.55 for both after correction). See [below](#convolutional-q-network).
-- **A memory made DQN much better on new mazes.** With a GRU memory that lasts through the episode, DQN solved 0.73 of new mazes against 0.29 for the standard network, ahead in all 10 seeds (pre-registered, p = 0.0004 after correction), and 0.34 for a plain network of the same size. It is the first change in this project to improve success on mazes the agent has never seen. See [below](#recurrent-q-network-memory).
-- **It is the memory, not the training that comes with it.** The same GRU network, trained identically but with its memory reset before every step, solved 0.70 of new mazes against 0.88 with memory (pre-registered, p < 0.001 after correction, behind in all 10 seeds), no better than the standard network (0.70). A standard network trained on as many steps per update did not improve (0.47, p = 0.061). See [below](#memory-or-sequence-replay).
-- **PPO generalised slightly better than DQN but learned more slowly.** With standard settings for both, PPO solved 0.69 of new mazes against 0.64 (pre-registered, p = 0.037 after correction), all of it on the longer mazes, and learned its training mazes more slowly (0.83 vs 0.90, p = 0.0003, behind in all 10 seeds). See [below](#ppo-a-policy-learner).
-- **Greedy evaluation understated every agent.** Re-playing 80 saved networks with one random move in twenty raised plain DQN's success on new mazes from 0.42 to 0.55, and every one of the 30 DQN networks improved (pre-registered, p < 0.001 after correction): random moves break loops. The memory result held under randomness (0.80 vs 0.42), and so did PPO's lead when it sampled its policy (0.90 vs 0.71 for DQN with random moves). See [below](#greedy-vs-a-little-randomness).
-- **Replaying mistakes explicitly did not help either.** Keeping collisions and hazards in a separate reserve and drawing a quarter of every training batch from it gave no measurable benefit, whether the reserve only over-weighted recent mistakes (`mistakes_hazard_maze`) or remembered them long after ordinary replay had forgotten them (`long_memory_mistakes`). See [below](#replaying-mistakes-explicitly).
 
-**What it does not (yet) support**
+**What the evidence does not (yet) support**
 - Whether prioritized replay helps or hurts: DQN + PER never differed significantly from plain DQN.
 - How common DQN's late collapse is: it happened in 1 of 10 hazard-maze runs, too few to estimate a rate.
 - That mistake memory *hurts*: it was behind plain DQN on held-out mazes in 9 of 10 seeds, but the difference was not significant (p = 0.082).
 - That a bigger network generalizes better: in the CNN study a plain network of the CNN's size solved 0.47 of new mazes against 0.33 (exploratory, p = 0.019 uncorrected), but a pre-registered retest with fresh seeds and mazes did not replicate it (0.34 vs 0.29, p = 0.32).
 - That PPO's *network* is much better than DQN's: PPO sampling its policy beat DQN with random moves by a wide margin (0.90 vs 0.71), but with the same kind of random moves for both the gap was small (0.75 vs 0.71, exploratory). Most of the wide margin comes from how PPO uses its randomness.
+- That a bigger batch *hurts*: DQN with batch 512 did worse than batch 64 on new mazes (0.47 vs 0.70), but three of its ten runs never learned at all and the difference was not significant (p = 0.061).
 
 | Learning to avoid mistakes (fixed maze) | When fewer mistakes is not better (terminal hazards) |
 |---|---|
 | ![Greedy mistakes during training](docs/figures/fixed_maze_mistakes.png) | ![Greedy success with terminal hazards](docs/figures/terminal_hazards_success.png) |
+
+## The studies in detail
 
 ### Replaying mistakes explicitly
 
@@ -220,7 +242,7 @@ cd ai-that-learns-from-its-mistakes
 python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-python -m pytest -q -m "not slow"     # ~45 s
+python -m pytest -q -m "not slow"     # a few minutes
 python -m src.app                     # dashboard at http://127.0.0.1:7860
 ```
 
@@ -288,7 +310,7 @@ Experiments are **resumable**: if Colab disconnects, run the same command again 
 - **Dueling DQN** (`dqn_dueling`): value and advantage heads, `Q = V + A − mean(A)`.
 - **3-step DQN** (`dqn_nstep`, also `dqn_dueling_nstep`): targets `r_t + γ r_{t+1} + γ² r_{t+2} + γ³ Q_target(s_{t+3}, ·)`, with shorter tails at the end of an episode.
 - **Convolutional DQN** (`dqn_cnn`): two 3×3 convolutions over the 5×5 view before one hidden layer.
-- **DQN with memory** (`dqn_rnn`): a GRU carries a memory through the episode; it replays runs of 16 consecutive steps, rebuilding the memory from up to 16 earlier steps first (burn-in).
+- **DQN with memory** (`dqn_rnn`): a GRU carries a memory through the episode; it replays runs of 16 consecutive steps, rebuilding the memory from up to 16 earlier steps first (burn-in). Its control `dqn_rnn_nomem` is the same network and training with the memory reset before every step.
 - **PPO** (`ppo`): an actor (move probabilities) and a critic (value of a cell), trained with the clipped PPO objective and GAE on rollouts of 2,048 steps; it explores by sampling its own policy, so it has no ε.
 
 Exploration is ε-greedy, decaying linearly from 1.0 to 0.05. Timeouts are treated as truncation (the agent still bootstraps), not as true terminal states.
@@ -337,7 +359,7 @@ LICENSE             MIT License
 
 - Small grids (8×8 and 9×9) and short training budgets chosen for a free CPU; results may not hold for larger tasks.
 - 5–10 seeds per experiment: enough to show large differences, not small ones.
-- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule, one CNN architecture, one recurrent setting (GRU 128, runs of 16 steps) and one set of standard PPO settings. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
+- One set of hyperparameters per algorithm, tuned on the fixed maze only, one reward-shaping strength (1.0), one n for multi-step returns (3), one curriculum schedule, one CNN architecture, one recurrent setting (GRU 128, runs of 16 steps), one larger batch (512) and one set of standard PPO settings. Mistake-aware replay was tested with one setting (5,000-mistake reserve, 25% of each batch); other settings were not tried.
 - The revisit penalty depends on history the observation does not include, so that part of the reward is not Markovian.
 - Greedy evaluation is a lower bound: a little randomness raised every saved network's success on new mazes (see [above](#greedy-vs-a-little-randomness)).
 

@@ -155,3 +155,13 @@ From `buffer_diagnostics.csv`: runs added about 139,000 (MLP), 149,000 (CNN) and
 - **Added after the run**: the `models/` folder and the code to write and read
   weights-only files. This adds outputs and changes no result.
 - Otherwise none.
+
+## Later result (note added 2026-11-10)
+
+The exploratory wide-MLP result above was retested, pre-registered, with fresh seeds and
+mazes in [`rnn_generalization`](../rnn_generalization/ANALYSIS.md) (H3): 0.34 against 0.29
+for the standard MLP (Holm-adjusted p = 0.32), so it did **not** replicate and should not be
+claimed. Re-evaluated with ε = 0.05 in
+[`stochastic_evaluation`](../stochastic_evaluation/ANALYSIS.md), this study's wide networks
+were still ahead of its standard ones (exploratory, p = 0.041) and Stage F's still were not
+(p = 0.27). Nothing above was changed.

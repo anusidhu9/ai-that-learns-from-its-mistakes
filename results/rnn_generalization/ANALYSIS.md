@@ -193,3 +193,13 @@ From `buffer_diagnostics.csv`: runs added about 143,000 (MLP), 123,000 (GRU) and
   before and after.
 - Otherwise none. The analysis script was written before the results existed and was
   run unchanged.
+
+## Later result (note added 2026-11-10)
+
+The open question in "Interpretation", point 1, was tested in a separate pre-registered
+study, [`memory_vs_replay`](../memory_vs_replay/ANALYSIS.md), with fresh seeds and mazes.
+The same GRU network and training with the memory reset before every step solved 0.70 of
+held-out mazes against 0.88 with memory (Holm-adjusted p < 0.001, 10 of 10 seeds), the same
+as the standard MLP (0.70); the MLP with batch 512 was no better than batch 64 (p = 0.061).
+So the gain reported here comes from the memory itself, not from the sequence replay. Nothing
+above was changed.

@@ -157,3 +157,13 @@ rollout (2,048 steps).
 - Otherwise none. The run was not interrupted, the analysis script was written before
   the results existed and was run unchanged, and the run took about 46 minutes against
   the 1–1.5 hours expected.
+
+## Later result (note added 2026-11-10)
+
+DQN was later evaluated with random moves in the pre-registered study
+[`stochastic_evaluation`](../stochastic_evaluation/ANALYSIS.md), on these same 20 saved
+networks and held-out mazes. PPO sampling its policy still beat DQN with ε = 0.05 (0.90 vs
+0.71, no overlap between seeds, Holm-adjusted p < 0.001). With the same ε = 0.05 for both,
+the gap was small (0.75 vs 0.71, exploratory, p = 0.025), so most of PPO's large sampled
+advantage comes from how it randomises its moves rather than from a better network. Nothing
+above was changed.

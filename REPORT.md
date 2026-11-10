@@ -2,7 +2,13 @@
 
 ## 1. Summary
 
-This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. Four agents (a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay) were compared in five experiments with 5–10 independent seeds each, DQN with an explicit memory of its mistakes was tested in two more, potential-based reward shaping in two pre-registered experiments, dueling heads and 3-step returns for DQN in two more, an easiest-first training curriculum in one more, a convolutional Q-network in one more, a recurrent Q-network with memory in one more, and PPO, a policy-gradient algorithm, against DQN in one more, using greedy evaluation (exploration off), 95% confidence intervals and exact permutation tests. A pre-registered study re-evaluated 80 of the trained networks, without further training, with a little randomness in their moves, and a last one separated the recurrent network's memory from the way it is trained.
+This project trains reinforcement-learning agents in grid worlds where they are rewarded for reaching a goal and penalised for mistakes (wall collisions, hazards, revisiting cells, timeouts), then tests whether they really make fewer mistakes. It ran 17 studies, each with 5–10 independent seeds per agent (Section 5 lists them):
+
+- **Baseline comparisons** (five experiments): a random baseline, tabular Q-learning, a Deep Q-Network and DQN with prioritized experience replay, on fixed layouts and on mazes never seen in training.
+- **Learning from mistakes on purpose** (two, the second pre-registered): DQN with an explicit memory of its mistakes.
+- **Ten pre-registered studies**, each with a protocol written before it ran, fresh seeds and fresh mazes: potential-based reward shaping (two experiments), dueling heads and 3-step returns (two), an easiest-first curriculum, a convolutional network, a recurrent network with memory, PPO against DQN, a re-evaluation of 80 trained networks with a little randomness in their moves, and a study separating the recurrent network's memory from the way it is trained.
+
+Every result uses greedy evaluation (exploration off) unless stated otherwise, the mean over seeds with a 95% confidence interval, and exact permutation tests, Holm-corrected within each pre-registered study.
 
 Main findings:
 
@@ -25,7 +31,7 @@ Main findings:
 
 *Does an agent that is penalised for its mistakes measurably stop making them, and how should that be measured?*
 
-The project was built in stages, each with tests: environments (Stage 1), a random baseline and tabular Q-learning (2), DQN with replay (3), persistent logs, checkpoints and exact resumption (4), multi-seed evaluation (5), visualization and an interactive dashboard (6–7). The project rule throughout was that no improvement is claimed unless the experiments support it.
+The project was built in stages, each with tests: environments (Stage 1), a random baseline and tabular Q-learning (2), DQN with replay (3), persistent logs, checkpoints and exact resumption (4), multi-seed evaluation (5), visualization and an interactive dashboard (6–7). Later stages added continuous integration (A), a policy map and maze editor (B), reward shaping (C), dueling and n-step DQN (D), a convolutional network (E), a recurrent network with memory (F), mistake-aware replay (G), a curriculum (H), PPO (I), stochastic evaluation of saved networks (K), the memory-versus-replay study (L) and a play-it-yourself tab in the dashboard (M); [CHANGELOG.md](CHANGELOG.md) records each. The project rule throughout was that no improvement is claimed unless the experiments support it. From `long_memory_mistakes` (Stage G) on, every study was pre-registered: hypotheses, measures, seeds, mazes and corrections were written down before any run, and anything that changed afterwards is listed as a deviation in its `ANALYSIS.md`. Results that were not pre-registered are labelled exploratory; two of them were retested in later studies (the wide network, Section 6.12, which did not replicate, and PPO's sampled play, Section 6.14, which did).
 
 ## 3. Environments
 
@@ -105,6 +111,8 @@ DQN's `train_freq` and `target_update` were tuned on the fixed maze during devel
 
 **Recurrent DQN** (`dqn_rnn`). The observation passes through one layer of 128 (ReLU) and then a GRU with 128 memory units, whose output gives the four Q-values (109,572 weights, about the size of `dqn_wide`). The memory is cleared at the start of every episode (`begin_episode`) and carried from step to step during it, in training and in greedy play. Replay keeps steps in order and records where each episode starts and ends (`SequenceReplayBuffer`, as in DRQN; Hausknecht & Stone, 2015), and each update draws 32 runs of 16 consecutive steps, never crossing into another episode. Before each run, up to 16 earlier steps of the same episode are fed through the network from a zero memory to rebuild it and are not trained on (burn-in, as in R2D2; Kapturowski et al., 2019). Targets use Double DQN step by step, with the target network's own memory. One update therefore trains on up to 512 steps against 64 for the MLPs. Sequence length, burn-in and sizes were fixed in advance and not tuned. A recurrent agent refuses PER, mistake replay, n-step returns, dueling heads and convolutions.
 
+**Two controls for the recurrent agent** (Section 6.15). `dqn_rnn_nomem` is `dqn_rnn` with one change: the GRU starts from a zero memory at every step, when acting, during burn-in, in training and in the targets, so each answer depends on the current observation alone. Its network, initial weights, sequence replay, burn-in, batch and update schedule are those of `dqn_rnn` (tested). `dqn_batch512` is the standard MLP DQN with batches of 512 instead of 64, as many trained steps per update as the recurrent agents, with everything else unchanged.
+
 **PPO** (`ppo`; Schulman et al., 2017). A different family: instead of action values it learns a policy π(a | s), the probability of each move, with an actor network (77 → 128 → 128 → 4, tanh, the same shape as DQN's) and a separate critic V(s) (77 → 128 → 128 → 1). It plays 2,048 steps with its current policy (episodes end and start inside this rollout), then learns from them and discards them; there is no replay buffer. Advantages use GAE (Schulman et al., 2016):
 
 ```
@@ -119,10 +127,26 @@ with ρ = π(a|s) / π_old(a|s), λ = 0.95, γ = 0.99. Each rollout is used for 
 
 - **Greedy evaluation.** Every reported result is measured with exploration switched off, using a separate environment and a separately seeded tie-breaking generator that is restored afterwards, so evaluation never changes training (tested). Section 6.14 additionally re-evaluates saved networks with random moves (ε-greedy, or PPO sampling its policy); every other result is greedy.
 - **When.** Before training (episode 0), every 50 episodes (every 500 for generalization), and at the end.
-- **What.** On a fixed layout, 10 greedy episodes; with a layout pool, one episode on each of the 50 training layouts; for generalization, also one episode on each of 50 held-out layouts (seeds 1000–1049) never used in training.
+- **What.** On a fixed layout, 10 greedy episodes; with a layout pool, one episode on each of the 50 training layouts; for generalization, also one episode on each of 50 held-out layouts never used in training (seeds 1000–1049 in `generalization`; the later studies' sets are listed below).
 - **Metrics.** Success rate; path efficiency (optimal length ÷ steps, for successful episodes that touched no hazard, otherwise 0); steps; mistakes by type; total reward. The two mistake-replay experiments also report steps to goal (mean steps of successful episodes only, so failures do not count as 100) and hazard rate (share of episodes that touched a hazard).
-- **Statistics.** Each seed contributes one value. Results are the mean across seeds ± the half-width of a 95% Student-t confidence interval. Two agents are compared with an exact two-sided permutation test on the per-seed values. With 10 seeds per agent the smallest attainable p-value is about 0.00001, with 5 seeds 2/252 ≈ 0.008, and with 3 seeds 0.10.
-- **Seeds.** 10 per agent for `hazard_maze` and `generalization` (both first run with fewer seeds, 5 and 3, then extended to settle open questions; Sections 6.2 and 6.5), 5 for the other fixed-layout experiments. `mistakes_hazard_maze` reuses `hazard_maze`'s seeds 0–9; `long_memory_mistakes` uses fresh seeds 100–109 and fresh layouts, fixed in a written protocol before it ran.
+- **Statistics.** Each seed contributes one value. Results are the mean across seeds ± the half-width of a 95% Student-t confidence interval. Two agents are compared with an exact two-sided permutation test on the per-seed values. With 10 seeds per agent the smallest attainable p-value is about 0.00001, with 5 seeds 2/252 ≈ 0.008, and with 3 seeds 0.10. In the pre-registered studies the primary hypotheses are corrected together with Holm-Bonferroni, and the same network evaluated two ways (Section 6.14) is compared with a paired sign-flip permutation test.
+- **Seeds.** 10 per agent for `hazard_maze` and `generalization` (both first run with fewer seeds, 5 and 3, then extended to settle open questions; Sections 6.2 and 6.5), 5 for the other fixed-layout experiments. `mistakes_hazard_maze` reuses `hazard_maze`'s seeds 0–9. Every pre-registered study uses its own fresh seeds and mazes:
+
+| Study | Section | Arms | Seeds | Training mazes | Held-out mazes |
+|---|---|---|---|---|---|
+| `long_memory_mistakes` | 6.7 | DQN 5k buffer, + mistake memory, DQN 10k buffer | 100–109 | 3000–3049 | 4000–4049 |
+| `shaping_speed` | 6.8 | tabular Q and DQN, with and without shaping | 200–209 | one fresh maze | — |
+| `shaping_generalization` | 6.8 | DQN, shaped DQN | 200–209 | 7100–7149 | 7200–7249 |
+| `dqn_variants_speed` | 6.9 | DQN, dueling, 3-step, both | 300–309 | one fresh maze | — |
+| `dqn_variants_generalization` | 6.9 | DQN, dueling, 3-step | 300–309 | 8100–8149 | 8200–8249 |
+| `curriculum_generalization` | 6.10 | DQN, DQN + curriculum | 400–409 | 9100–9149 | 9200–9250 except 9225 |
+| `cnn_generalization` | 6.11 | MLP, CNN, wide MLP | 500–509 | 9300–9349 | 9400–9449 |
+| `rnn_generalization` | 6.12 | MLP, GRU, wide MLP | 600–609 | 9500–9549 | 9600–9651 except 9619, 9632 |
+| `ppo_generalization` | 6.13 | DQN, PPO | 700–709 | 9700–9749 | 9800–9849 |
+| `stochastic_evaluation` | 6.14 | the 80 saved networks of 6.11–6.13 (no training) | — | — | as in 6.11–6.13 |
+| `memory_vs_replay` | 6.15 | MLP, MLP batch 512, GRU, GRU with memory reset | 800–809 | 9900–9949 | 10001–10050 |
+
+*Held-out sets skip layouts that generate a maze already used in the study (Section 6.10 explains how two earlier sets were found to contain one).*
 
 ## 6. Results
 
