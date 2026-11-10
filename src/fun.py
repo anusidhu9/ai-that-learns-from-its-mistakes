@@ -110,6 +110,31 @@ def episode_line(summary: dict) -> str:
                   f"Timeout after {mistakes} mistakes. Epsilon made me do it."), *key)
 
 
+def human_vs_agent_line(you: dict, agent: dict) -> str:
+    """One-liner comparing a human's episode with the agent's on the same maze."""
+    key = (you["steps"], you["mistakes"], agent["steps"], agent["mistakes"])
+    if you["success"] and not agent["success"]:
+        return _pick(("Human 1, robot 0. Tell nobody, it gets embarrassed.",
+                      "You found the goal and the agent did not. Biology wins this round.",
+                      "The agent timed out where you didn't. Maybe it needs a memory."), *key)
+    if agent["success"] and not you["success"]:
+        return _pick(("The agent made it and you didn't. It has practised a lot, to be fair.",
+                      "Robot 1, human 0. It has seen thousands of mazes; you have seen one.",
+                      "Outplayed by a neural network. Happens to the best of us."), *key)
+    if not you["success"]:
+        return _pick(("Nobody reached the goal. The maze is undefeated.",
+                      "A draw: both of you wandered off. The maze would like a word."), *key)
+    if you["steps"] < agent["steps"]:
+        return _pick((f"You were {agent['steps'] - you['steps']} steps faster. Show-off.",
+                      "Both made it, and you took the shorter route."), *key)
+    if you["steps"] > agent["steps"]:
+        return _pick((f"Both made it; the agent was {you['steps'] - agent['steps']} steps "
+                      "quicker.",
+                      "Both reached the goal, and the agent found the shorter route."), *key)
+    return _pick(("Dead heat: same number of steps. Great minds.",
+                  "A perfect tie. Somewhere, a statistician asks for more seeds."), *key)
+
+
 def mood(summary: dict) -> str:
     """A short emoji-free mood label for an episode."""
     if summary["success"] and summary["mistakes"] == 0:

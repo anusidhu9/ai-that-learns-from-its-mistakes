@@ -297,6 +297,63 @@ def maze_image(grid: np.ndarray, start, cell_px: int = 36) -> np.ndarray:
     return img
 
 
+FOG_COLOR, PLAYER_COLOR, TRAIL_COLOR = "#b9b8b2", "#eb6834", "#f5b58f"
+
+
+def play_image(grid: np.ndarray, start, pos, path=None, view_radius: Optional[int] = None,
+               cell_px: int = 36) -> np.ndarray:
+    """RGB picture for the You-play tab, `cell_px` pixels per cell.
+
+    The player is an orange disc and the cells already visited (`path`) are
+    tinted. With `view_radius`, only the (2r+1) x (2r+1) window around the
+    player is drawn, as the local-view agent sees it: everything outside it,
+    the goal outside it included, is fog, and no trail is shown (an agent
+    without memory has no record of where it has been).
+    """
+    def rgb(hex_color: str) -> np.ndarray:
+        return np.array([int(hex_color[i:i + 2], 16) for i in (1, 3, 5)], dtype=np.uint8)
+
+    img = maze_image(grid, start, cell_px)
+    h, w = grid.shape
+
+    def cell(r, c):
+        return img[r * cell_px:(r + 1) * cell_px, c * cell_px:(c + 1) * cell_px]
+
+    yy, xx = np.mgrid[:cell_px, :cell_px]
+    centre = (cell_px - 1) / 2
+    inner = (np.abs(yy - centre) <= cell_px * 0.18) & (np.abs(xx - centre) <= cell_px * 0.18)
+    disc = (yy - centre) ** 2 + (xx - centre) ** 2 <= (cell_px * 0.36) ** 2
+    if view_radius is None:
+        for r, c in set(map(tuple, path or [])):
+            if grid[r, c] == EMPTY:
+                cell(r, c)[inner] = rgb(TRAIL_COLOR)
+    cell(*pos)[disc] = rgb(PLAYER_COLOR)
+    if view_radius is not None:
+        rows, cols = np.mgrid[:h, :w]
+        fog = (np.abs(rows - pos[0]) > view_radius) | (np.abs(cols - pos[1]) > view_radius)
+        mask = np.kron(fog, np.ones((cell_px, cell_px), dtype=bool))
+        img[mask] = rgb(FOG_COLOR)
+        img[::cell_px, :][mask[::cell_px, :]] = rgb(GRIDLINE)
+        img[:, ::cell_px][mask[:, ::cell_px]] = rgb(GRIDLINE)
+    return img
+
+
+def compare_paths_figure(grid: np.ndarray, start, you: dict, agent: dict,
+                         agent_label: str, agent_color: str = "#2a78d6") -> Figure:
+    """Your path and the agent's on the same maze, side by side. `you` and
+    `agent` hold "path" (list of cells) and "summary" (an episode summary)."""
+    fig, axes = _figure(8.6, 4.6, ncols=2)
+    for ax, who, color, label in ((axes[0, 0], you, PLAYER_COLOR, "You"),
+                                  (axes[0, 1], agent, agent_color, agent_label)):
+        s = who["summary"]
+        result = "reached the goal" if s["success"] else "did not reach the goal"
+        draw_grid(ax, grid, start=start, pos=who["path"][-1], path=who["path"],
+                  path_color=color, title=f"{label}: {result}")
+        ax.set_xlabel(f"{s['steps']} steps, {s['mistakes']} mistakes, "
+                      f"reward {s['total_reward']:+.2f}", color=MUTED, fontsize=10)
+    return fig
+
+
 def cell_at(x: int, y: int, shape, cell_px: int = 36) -> Optional[tuple]:
     """Grid cell under pixel (x, y) of a maze_image, or None if outside."""
     r, c = int(y) // cell_px, int(x) // cell_px
@@ -591,7 +648,7 @@ def _action_scores(agent, obs) -> Optional[list]:
 
 
 def record_episode(env: GridWorld, agent, layout_seed: Optional[int] = None,
-                   seed: int = 0) -> List[dict]:
+                   seed: int = 0, start=None) -> List[dict]:
     """Play one greedy episode and record every step for replay.
 
     Like evaluation, this swaps in a seeded tie-breaking generator and
@@ -599,12 +656,13 @@ def record_episode(env: GridWorld, agent, layout_seed: Optional[int] = None,
     Frame 0 is the start state; each later frame holds the action taken, the
     reward, the events, the agent's Q-values for the state it acted in (a
     policy agent's move probabilities, marked "scores": "probs"), and a
-    commentary line.
+    commentary line. `start` begins the episode on another empty cell of the
+    same layout (see GridWorld.reset).
     """
     original_rng = agent.rng
     agent.rng = np.random.default_rng(seed)
     try:
-        obs, _ = env.reset(seed=seed, layout_seed=layout_seed)
+        obs, _ = env.reset(seed=seed, layout_seed=layout_seed, start=start)
         if hasattr(agent, "begin_episode"):
             agent.begin_episode()
         frames = [{"step": 0, "pos": env.pos, "action": None, "reward": 0.0, "total": 0.0,

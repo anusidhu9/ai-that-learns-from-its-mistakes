@@ -235,11 +235,14 @@ For a CPU-only PyTorch (smaller download), install it first with `pip install to
 | 📊 Results | Every saved experiment: bar charts and greedy learning curves with 95% CIs, tables, permutation tests with verdicts |
 | 🏋️ Train | Train any agent on any environment with live learning curves, commentary and achievements |
 | 🔥 Mistake history | Early-vs-late mistake heatmap, reward breakdown, the Hall of Shame, the full mistake log |
-| 🎬 Watch it play | Record a greedy episode and replay it step by step with the agent's Q-values, on the training layout, an unseen one or your own maze |
+| 🎬 Watch it play | Record a greedy episode and replay it with the agent's Q-values, on the training layout, an unseen one or your own maze: play, pause, step back and forward, set the speed, or click a cell to make the agent start there |
+| 🕹️ You play | Play a maze yourself with the arrow keys, by the agent's rules (same rewards, penalties and 100-step limit). **Agent's view** hides everything outside the 5 × 5 window and your trail, as a local-view agent without memory sees it. Then the current agent plays the same maze and both paths are shown side by side |
 | 🗺️ Policy map & editor | Draw a maze by clicking cells (or paste it as text) and see the move the agent would make on every cell; tick **Train on my maze** in the Train tab to train on it |
 | ⚔️ Q-learning vs DQN | Train both live on the same environment and seed |
 | ✅ Evaluate | Greedy evaluation on the training layout and on unseen layouts |
 | 💾 Checkpoints | Download the trained agent, or upload a checkpoint (loaded in PyTorch's safe mode) |
+
+Tabs that don't fit the window are under the **⋯** button at the end of the tab bar. To race a trained memory agent in **You play**, load one of the saved networks in **Checkpoints**, for example `results/memory_vs_replay/models/dqn_rnn_s800.pt` (with memory) or `dqn_rnn_nomem_s800.pt` (the same network without it).
 
 ![Step-by-step replay with Q-values](docs/figures/replay_frame.png)
 
@@ -318,7 +321,7 @@ src/
   visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              315 tests (pytest); `-m "not slow"` skips one long training test
+tests/              330 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report

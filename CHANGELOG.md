@@ -2,6 +2,20 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Play it yourself, and replay controls (Stage M)
+
+The studies showed that a local-view agent without memory loops because one 5 × 5 window can't tell it where it has been. This stage lets people feel that for themselves and look at the agent's choices more closely. No experiment, agent or result changes.
+
+**Added**
+- **🕹️ You play** tab: play a training, unseen or hand-drawn maze with the arrow keys (or on-screen buttons) under exactly the environment's rules and rewards, with live steps, reward and mistakes. **Agent's view** shows only the 5 × 5 window and the goal's direction, with no trail, as a local-view agent without memory sees it. **Compare with the agent** lets the current agent play the same maze greedily and shows both paths side by side with a table and a commentary line (`fun.human_vs_agent_line`). Every key press is queued and moves run one at a time.
+- **🎬 Watch it play**: ⏸ Pause (Play resumes from the current step), ◀ Step / Step ▶ buttons, a seconds-per-step slider instead of three speeds, and a clickable map that records the same maze again with the agent starting on the clicked cell.
+- `GridWorld.reset(start=...)` (optional; refuses walls, hazards, the goal, cells outside the maze and cells the goal can't be reached from) and `record_episode(start=...)`. Without `start` both behave exactly as before, including their random draws (tested).
+- `visualization.play_image` (fast pixel rendering with a fog mode) and `compare_paths_figure`.
+- 15 tests (330 in total) in `tests/test_play.py`: the start option, recording from another start, both renderings pixel by pixel, moves matching the environment exactly, timeouts, the agent's view, restarts, the editor's maze without an agent, comparing with a trained agent and with a saved Stage L network, refusing a comparison on a different maze, the commentary lines, the step buttons and resumed playback, recording from a clicked cell, and the new controls and key bindings in the built app. Checked in Edge with Playwright: arrow keys, buttons, the agent's view, the comparison, step buttons, pause and the start map.
+
+**Changed**
+- The dashboard is launched with a small script (`launch(js=...)`) that turns arrow keys into the You-play buttons, only while that tab is open and never while typing in a field.
+
 ## Memory vs sequence replay (Stage L)
 
 Stage F's memory network was also trained differently (runs of 16 consecutive steps, 8× as many trained steps per update), and Stage F could not say which of the two explained its gain. This stage separates them.

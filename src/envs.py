@@ -393,17 +393,30 @@ class GridWorld:
 
     # -- core API ------------------------------------------------------------
 
-    def reset(self, seed: Optional[int] = None,
-              layout_seed: Optional[int] = None) -> Tuple[np.ndarray, dict]:
+    def reset(self, seed: Optional[int] = None, layout_seed: Optional[int] = None,
+              start: Optional[Pos] = None) -> Tuple[np.ndarray, dict]:
+        """Start an episode. `start` (optional, used only by the dashboard)
+        places the agent on another empty cell of the chosen layout; the
+        layout, its goal and the random draws are the same as without it."""
         if seed is not None:
             self.rng = np.random.default_rng(seed)
 
         if self._custom_layout is not None:
-            grid, start, goal = self._custom_layout
+            grid, start_cell, goal = self._custom_layout
             self.layout_seed = None
         else:
             self.layout_seed = self._choose_layout_seed(layout_seed)
-            grid, start, goal = self._get_layout(self.layout_seed)
+            grid, start_cell, goal = self._get_layout(self.layout_seed)
+        if start is None:
+            start = start_cell
+        else:
+            start = (int(start[0]), int(start[1]))
+            h, w = grid.shape
+            if not (0 <= start[0] < h and 0 <= start[1] < w) or grid[start] != EMPTY:
+                raise ValueError(f"start {start} must be an empty cell (not a wall, hazard "
+                                 "or the goal)")
+            if shortest_path_length(grid, start, goal, avoid_hazards=False) is None:
+                raise ValueError(f"the goal can't be reached from {start}")
 
         self.grid = grid.copy()
         self.start, self.goal, self.pos = start, goal, start

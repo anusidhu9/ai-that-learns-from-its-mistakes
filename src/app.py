@@ -4,8 +4,8 @@
     python -m src.app --share    # also prints a temporary public link (e.g. from Colab)
 
 Tabs: saved multi-seed results, live training, mistake history, step-by-step
-replay, policy map and maze editor, Q-learning vs DQN race, greedy evaluation,
-checkpoints, and an About page. Each browser session has its own agent; nothing is shared between users.
+replay, playing a maze yourself against the agent, policy map and maze editor,
+Q-learning vs DQN race, greedy evaluation, checkpoints, and an About page. Each browser session has its own agent; nothing is shared between users.
 """
 from __future__ import annotations
 
@@ -26,16 +26,17 @@ import numpy as np
 import pandas as pd
 
 from src import fun
-from src.envs import (EMPTY, GOAL, HAZARD, PRESETS, WALL, RewardConfig, check_layout,
-                      layout_to_ascii, parse_layout, shortest_path_length)
+from src.envs import (ACTION_NAMES, EMPTY, GOAL, HAZARD, PRESETS, WALL, RewardConfig,
+                      check_layout, layout_to_ascii, parse_layout, shortest_path_length)
 from src.evaluation import (EXPERIMENTS, compare_agents, evaluate_agent, format_p,
                             load_experiment)
 from src.training import (TrainConfig, Trainer, build_env, compare_phases, load_agent)
 from src.visualization import (AGENT_COLORS, AGENT_LABELS, _agents_in, cell_at,
-                               experiment_bars_figure, experiment_curves_figure, frame_figure,
-                               learning_curves_figure, maze_figure, maze_image,
-                               mistake_heatmap_figure, mistake_types_figure, policy_map,
-                               policy_map_figure, record_episode, reward_breakdown_figure)
+                               compare_paths_figure, experiment_bars_figure,
+                               experiment_curves_figure, frame_figure, learning_curves_figure,
+                               maze_figure, maze_image, mistake_heatmap_figure,
+                               mistake_types_figure, play_image, policy_map, policy_map_figure,
+                               record_episode, reward_breakdown_figure)
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
@@ -82,8 +83,8 @@ MAX_EPISODES = {"random": 1000, "tabular_q": 2000, "dqn": 800, "dqn_per": 800,
 # ---------------------------------------------------------------------------
 
 def new_session() -> dict:
-    return {"trainer": None, "frames": [], "replay_env": None, "editor": None,
-            "commentary": deque(maxlen=14), "announced": set()}
+    return {"trainer": None, "frames": [], "replay_env": None, "replay_ls": None,
+            "editor": None, "play": None, "commentary": deque(maxlen=14), "announced": set()}
 
 
 def _need_trainer(state: dict) -> Optional[str]:
@@ -297,13 +298,53 @@ def record_replay(state, layout_mode, layout_seed):
         if env is None:
             return None, _NO_UNSEEN, gr.update(maximum=1, value=0), state
     frames = record_episode(env, trainer.agent, layout_seed=ls)
-    state.update(frames=frames, replay_env=env)
+    state.update(frames=frames, replay_env=env, replay_ls=ls, replay_start=env.start)
+    return _replay_result(state)
+
+
+def _replay_result(state):
+    """Outputs for a freshly recorded episode: its first frame plus a verdict."""
+    frames = state["frames"]
     ep = frames[-1].get("episode") or {}
     fig, info = _frame_outputs(state, 0)
-    verdict = (f"\n\n**Episode result:** {'reached the goal' if ep.get('success') else 'failed'} "
+    start = frames[0]["pos"]
+    where = "" if start == state.get("replay_start", start) else f" from {start}"
+    verdict = (f"\n\n**Episode result{where}:** "
+               f"{'reached the goal' if ep.get('success') else 'failed'} "
                f"in {ep.get('steps')} steps (shortest safe path: {ep.get('optimal_length')}), "
                f"{ep.get('mistakes')} mistakes. {fun.episode_line(ep) if ep else ''}")
     return fig, info + verdict, gr.update(maximum=max(1, len(frames) - 1), value=0), state
+
+
+def record_from_cell(state, cell):
+    """Record the same layout again, starting on `cell` (row, col)."""
+    if not state or not state.get("frames"):
+        return None, "Record an episode first.", gr.update(), state
+    env = state["replay_env"]
+    try:
+        frames = record_episode(env, state["trainer"].agent, layout_seed=state.get("replay_ls"),
+                                start=cell)
+    except ValueError as error:
+        return gr.update(), f"Can't start there: {error}.", gr.update(), state
+    state["frames"] = frames
+    return _replay_result(state)
+
+
+def replay_start_click(state, evt: gr.SelectData):
+    env = (state or {}).get("replay_env")
+    if env is None or not state.get("frames"):
+        return None, "Record an episode first.", gr.update(), state
+    cell = cell_at(evt.index[0], evt.index[1], env.grid.shape, CELL_PX)
+    if cell is None:
+        return gr.update(), "Click a cell inside the maze.", gr.update(), state
+    return record_from_cell(state, cell)
+
+
+def replay_start_map(state):
+    """Small clickable map of the recorded layout, with the episode's start."""
+    if not state or not state.get("frames"):
+        return None
+    return maze_image(state["replay_env"].grid, state["frames"][0]["pos"], CELL_PX)
 
 
 def scrub_replay(state, index):
@@ -312,15 +353,196 @@ def scrub_replay(state, index):
     return _frame_outputs(state, index)
 
 
-def play_replay(state, speed):
+def step_replay(state, index, delta):
+    """One step back (delta -1) or forward (+1) from `index`, kept in range."""
+    if not state or not state.get("frames"):
+        return None, "Record an episode first.", gr.update()
+    i = int(max(0, min(int(index or 0) + delta, len(state["frames"]) - 1)))
+    fig, info = _frame_outputs(state, i)
+    return fig, info, gr.update(value=i)
+
+
+def _replay_delay(speed) -> float:
+    """Seconds per step: a number (clamped to 0.05-1) or Slow / Normal / Fast."""
+    if isinstance(speed, str):
+        return {"Slow": 0.6, "Normal": 0.3, "Fast": 0.1}.get(speed, 0.3)
+    return float(min(max(float(speed), 0.05), 1.0))
+
+
+def play_replay(state, speed, index=0):
+    """Play from step `index` (from the start if it is the last step) to the end.
+    Pausing cancels this generator; pressing Play again resumes where it stopped."""
     if not state or not state.get("frames"):
         yield None, "Record an episode first.", gr.update()
         return
-    delay = {"Slow": 0.6, "Normal": 0.3, "Fast": 0.1}.get(speed, 0.3)
-    for i in range(len(state["frames"])):
+    n = len(state["frames"])
+    first = int(index or 0)
+    first = 0 if first >= n - 1 else max(first, 0)
+    delay = _replay_delay(speed)
+    for i in range(first, n):
         fig, info = _frame_outputs(state, i)
         yield fig, info, gr.update(value=i)
         time.sleep(delay)
+
+
+# ---------------------------------------------------------------------------
+# You play tab
+# ---------------------------------------------------------------------------
+
+FULL_VIEW, AGENT_VIEW = "Full map", "Agent's view (5 × 5)"
+PLAY_KEYS_JS = """
+() => {
+  const ids = {ArrowUp: "play-up", ArrowRight: "play-right", ArrowDown: "play-down",
+               ArrowLeft: "play-left"};
+  document.addEventListener("keydown", (event) => {
+    const id = ids[event.key];
+    if (!id) return;
+    const target = event.target;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+                   || target.isContentEditable)) return;
+    const button = document.getElementById(id);
+    if (!button || button.offsetParent === null) return;  // only while You play is open
+    event.preventDefault();
+    button.click();
+  });
+}
+"""
+
+
+def _play_env(state: dict, layout_mode: str, number):
+    """(environment reset on the chosen maze, layout seed to replay it, problem).
+
+    With an agent, it is the maze Watch it play would use for that choice;
+    without one, a maze-preset layout (or the editor's maze)."""
+    trainer = state.get("trainer")
+    ls = None
+    if layout_mode == MY_MAZE:
+        if trainer is not None:
+            env, problem = _maze_env(state)
+            return env, None, problem
+        ed = _editor(state, "maze")
+        problem = check_layout(ed["grid"], ed["start"], ed["goal"])
+        if problem:
+            return None, None, f"Your maze can't be used yet: {problem}."
+        env = build_env(TrainConfig(env_preset="maze", layout_text=layout_to_ascii(
+            ed["grid"], ed["start"], ed["goal"])))
+    elif layout_mode == "Unseen layout":
+        ls = UNSEEN_BASE + int(number or 0)
+        env = _unseen_env(trainer) if trainer is not None else build_env(TrainConfig())
+        if env is None:
+            return None, None, _NO_UNSEEN
+    else:
+        env = build_env(trainer.config if trainer is not None else TrainConfig())
+    env.reset(seed=0, layout_seed=ls)
+    return env, ls, None
+
+
+def _play_status(game: dict, view: str) -> str:
+    env = game["env"]
+    s = env.stats
+    lines = [f"**Step {env.steps} / {env.config.max_steps}** · reward {s['total_reward']:+.2f} · "
+             f"collisions {s['collision']} · revisits {s['revisit']}"
+             + (f" · hazards {s['hazard']}" if env.config.n_hazards else "")]
+    if view == AGENT_VIEW and not env.done:
+        dr, dc = env.goal[0] - env.pos[0], env.goal[1] - env.pos[1]
+        parts = [f"{abs(dr)} {'down' if dr > 0 else 'up'}" if dr else "",
+                 f"{abs(dc)} {'right' if dc > 0 else 'left'}" if dc else ""]
+        lines.append(f"🧭 Goal: {', '.join(p for p in parts if p)}. Like the agent, you see "
+                     "only the 5 × 5 window and the goal's direction, and no trail of where "
+                     "you have been.")
+    lines += [f"> {line}" for line in game["log"][-3:]]
+    if env.done:
+        ep = game["summary"]
+        lines.append(f"**Finished:** {'you reached the goal' if ep['success'] else 'out of time'} "
+                     f"in {ep['steps']} steps (shortest safe path: {ep['optimal_length']}), "
+                     f"{ep['mistakes']} mistakes. {fun.episode_line(ep)}\n\n"
+                     "Press **Compare with the agent** to see how it does on the same maze.")
+    elif not game["log"]:
+        lines.append("Move with the arrow keys or the buttons. Reach the green goal.")
+    return "\n\n".join(lines)
+
+
+def _play_outputs(state: dict, view: str):
+    game = state["play"]
+    env = game["env"]
+    radius = env.config.view_radius if view == AGENT_VIEW else None
+    img = play_image(env.grid, env.start, env.pos, game["path"], radius, CELL_PX)
+    return img, _play_status(game, view), state
+
+
+def play_new(state, layout_mode, number, view):
+    """Start (or restart) a game on the chosen maze."""
+    state = state or new_session()
+    env, ls, problem = _play_env(state, layout_mode, number)
+    if problem:
+        return None, problem, state
+    state["play"] = {"env": env, "ls": ls, "mode": layout_mode, "number": number,
+                     "path": [env.pos], "log": [], "summary": None}
+    return _play_outputs(state, view)
+
+
+def play_move(state, move: str, view):
+    """Take one move ("up", "right", "down" or "left") by the environment's rules."""
+    game = (state or {}).get("play")
+    if not game:
+        return None, "Press **New game** first.", state
+    env = game["env"]
+    if not env.done:
+        before = env.stats["total_reward"]
+        _, _, _, _, info = env.step(ACTION_NAMES.index(move))
+        gained = env.stats["total_reward"] - before   # task reward, without any shaping
+        game["path"].append(env.pos)
+        line = " ".join(fun.event_line(e, env.pos, env.steps) for e in info["events"])
+        game["log"].append(f"Step {env.steps}: {move} ({gained:+.2f}). {line}".rstrip())
+        if env.done:
+            game["summary"] = info["episode"]
+    return _play_outputs(state, view)
+
+
+def play_view(state, view):
+    if not (state or {}).get("play"):
+        return None, "Press **New game** first.", state
+    return _play_outputs(state, view)
+
+
+def play_compare(state):
+    """The agent plays the maze you just played; both paths side by side."""
+    game = (state or {}).get("play")
+    if not game or game["summary"] is None:
+        return None, "Finish a game first: reach the goal or run out of steps."
+    trainer = state.get("trainer")
+    if trainer is None:
+        return None, ("No agent to compare with. Train one in **🏋️ Train**, or load a saved "
+                      "network in **💾 Checkpoints**, for example "
+                      "`results/memory_vs_replay/models/dqn_rnn_s800.pt` (with memory) or "
+                      "`dqn_rnn_nomem_s800.pt` (the same network without it), then press "
+                      "**New game**.")
+    env, ls, problem = _play_env(state, game["mode"], game["number"])
+    mine = game["env"]
+    if problem or not np.array_equal(env.grid, mine.grid) or env.start != mine.start:
+        return None, ("The current agent's maze is not the one you played (was another agent "
+                      "trained or loaded?). Press **New game** and play again.")
+    frames = record_episode(env, trainer.agent, layout_seed=ls)
+    agent = frames[-1]["episode"]
+    you = game["summary"]
+    name = trainer.config.agent
+    label = AGENT_LABELS.get(name, name)
+    fig = compare_paths_figure(mine.grid, mine.start, {"path": game["path"], "summary": you},
+                               {"path": [f["pos"] for f in frames], "summary": agent}, label,
+                               AGENT_COLORS.get(name, "#2a78d6"))
+
+    def yes(v):
+        return "✅" if v else "❌"
+
+    table = ("| | You | " + label + " |\n|---|---|---|\n"
+             f"| Reached the goal | {yes(you['success'])} | {yes(agent['success'])} |\n"
+             f"| Steps (shortest: {you['optimal_length']}) | {you['steps']} | {agent['steps']} |\n"
+             f"| Collisions | {you['collisions']} | {agent['collisions']} |\n"
+             f"| Revisits | {you['revisits']} | {agent['revisits']} |\n"
+             f"| Reward | {you['total_reward']:+.2f} | {agent['total_reward']:+.2f} |")
+    return fig, (f"{table}\n\n{fun.human_vs_agent_line(you, agent)}\n\n"
+                 f"<small>The agent plays greedily (always its best-rated move), as in "
+                 f"**🎬 Watch it play**.</small>")
 
 
 # ---------------------------------------------------------------------------
@@ -645,6 +867,7 @@ CSS = """
 #hero h1 { margin-bottom: 0.2rem; }
 #hero p { color: var(--body-text-color-subdued); margin-top: 0; }
 #maze-text textarea { font-family: ui-monospace, Consolas, monospace; line-height: 1.25; }
+#play-up, #play-down, #play-left, #play-right { font-size: 1.6rem; line-height: 1; }
 """
 
 ABOUT = f"""
@@ -793,17 +1016,88 @@ def build_app() -> gr.Blocks:
                                        value="Training layout", label="Layout")
                 unseen_seed = gr.Number(value=0, precision=0,
                                         label=f"Unseen layout number (seed {UNSEEN_BASE} + n)")
-                speed = gr.Radio(["Slow", "Normal", "Fast"], value="Normal", label="Speed")
+                speed = gr.Slider(0.05, 1.0, value=0.3, step=0.05, label="Seconds per step")
             with gr.Row():
                 record_btn = gr.Button("Record episode", variant="primary")
-                play_btn = gr.Button("▶ Play")
+                back_btn = gr.Button("◀ Step", elem_id="replay-back")
+                play_btn = gr.Button("▶ Play", elem_id="replay-play")
+                pause_btn = gr.Button("⏸ Pause", elem_id="replay-pause")
+                fwd_btn = gr.Button("Step ▶", elem_id="replay-forward")
             frame_plot = gr.Plot(show_label=False)
             frame_md = gr.Markdown()
             step_slider = gr.Slider(0, 1, value=0, step=1, label="Step")
+            with gr.Accordion("Start somewhere else: click a cell", open=False):
+                gr.Markdown("After recording, click any empty cell of this map to record the "
+                            "same maze again with the agent starting there.")
+                start_map = gr.Image(show_label=False, interactive=False, type="numpy",
+                                     format="png", elem_id="replay-start-map", height=260)
+            replay_outputs = [frame_plot, frame_md, step_slider, state]
             record_btn.click(record_replay, [state, layout_mode, unseen_seed],
-                             [frame_plot, frame_md, step_slider, state])
+                             replay_outputs).then(replay_start_map, [state], [start_map])
+            start_map.select(replay_start_click, [state], replay_outputs).then(
+                replay_start_map, [state], [start_map])
             step_slider.release(scrub_replay, [state, step_slider], [frame_plot, frame_md])
-            play_btn.click(play_replay, [state, speed], [frame_plot, frame_md, step_slider])
+            back_btn.click(lambda s, i: step_replay(s, i, -1), [state, step_slider],
+                           [frame_plot, frame_md, step_slider], show_progress="hidden")
+            fwd_btn.click(lambda s, i: step_replay(s, i, 1), [state, step_slider],
+                          [frame_plot, frame_md, step_slider], show_progress="hidden")
+            play_event = play_btn.click(play_replay, [state, speed, step_slider],
+                                        [frame_plot, frame_md, step_slider])
+            pause_btn.click(None, cancels=[play_event])
+
+        with gr.Tab("🕹️ You play"):
+            gr.Markdown("Play a maze yourself, by the agent's rules: the same rewards and "
+                        "penalties, at most 100 steps. Move with the **arrow keys** or the "
+                        "buttons. **Agent's view** shows only what a local-view agent sees: "
+                        "the 5 × 5 window around it and the goal's direction, with no memory "
+                        "of where it has been. When you finish, let the current agent play "
+                        "the same maze.")
+            with gr.Row():
+                play_layout = gr.Radio(["Training layout", "Unseen layout", MY_MAZE],
+                                       value="Training layout", label="Maze")
+                play_number = gr.Number(value=0, precision=0,
+                                        label=f"Unseen layout number (seed {UNSEEN_BASE} + n)")
+                play_view_radio = gr.Radio([FULL_VIEW, AGENT_VIEW], value=FULL_VIEW,
+                                           label="View")
+            with gr.Row():
+                new_game_btn = gr.Button("New game / restart", variant="primary",
+                                         elem_id="play-new")
+                compare_btn = gr.Button("Compare with the agent", elem_id="play-compare")
+            with gr.Row():
+                with gr.Column(scale=3, min_width=300):
+                    play_board = gr.Image(show_label=False, interactive=False, type="numpy",
+                                          format="png", elem_id="play-board", height=360)
+                with gr.Column(scale=2, min_width=260):
+                    with gr.Row():
+                        gr.HTML("")
+                        up_btn = gr.Button("↑", elem_id="play-up", min_width=60)
+                        gr.HTML("")
+                    with gr.Row():
+                        left_btn = gr.Button("←", elem_id="play-left", min_width=60)
+                        down_btn = gr.Button("↓", elem_id="play-down", min_width=60)
+                        right_btn = gr.Button("→", elem_id="play-right", min_width=60)
+                    play_md = gr.Markdown("Press **New game** to start.")
+            compare_plot = gr.Plot(show_label=False, visible=False)
+            compare_md = gr.Markdown()
+            play_outputs = [play_board, play_md, state]
+            new_game_btn.click(play_new, [state, play_layout, play_number, play_view_radio],
+                               play_outputs).then(
+                lambda: (gr.update(visible=False), ""), None, [compare_plot, compare_md])
+            # Every key press counts (trigger_mode="multiple"), and moves run one at a
+            # time, in order, so two quick presses can't change the same game at once.
+            for button, move in ((up_btn, "up"), (right_btn, "right"), (down_btn, "down"),
+                                 (left_btn, "left")):
+                button.click(lambda s, v, m=move: play_move(s, m, v), [state, play_view_radio],
+                             play_outputs, show_progress="hidden", trigger_mode="multiple",
+                             concurrency_limit=1, concurrency_id="play-move")
+            play_view_radio.change(play_view, [state, play_view_radio], play_outputs,
+                                   show_progress="hidden")
+
+            def compare_ui(s):
+                fig, md = play_compare(s)
+                return gr.update(value=fig, visible=fig is not None), md
+
+            compare_btn.click(compare_ui, [state], [compare_plot, compare_md])
 
         with gr.Tab("🗺️ Policy map & editor"):
             gr.Markdown("Draw a maze by clicking cells, then see which way the agent would go "
@@ -901,7 +1195,7 @@ def launch_app(share: bool = False, port: Optional[int] = None, **kwargs):
     demo = build_app()
     demo.queue(default_concurrency_limit=2)
     return demo.launch(share=share, server_port=port, theme=gr.themes.Soft(),
-                       css=CSS, max_file_size="200mb", **kwargs)
+                       css=CSS, js=PLAY_KEYS_JS, max_file_size="200mb", **kwargs)
 
 
 def main(argv: Optional[List[str]] = None) -> None:
