@@ -1,0 +1,54 @@
+Primary (Holm over H1-H2):
+H1 held-out success: ppo 0.686 vs dqn 0.622  diff +0.064  p 0.0103  higher/tied/lower 9/0/1
+H2 learning speed: ppo 0.825 vs dqn 0.858  diff -0.033  p 0.0148  higher/tied/lower 2/0/8
+Holm-adjusted (H1, H2): [0.0205, 0.0205]
+  H1: REPLICATED (significant, same direction as Stage I)
+  H2: REPLICATED (significant, same direction as Stage I)
+
+Pooled with Stage I (pre-specified descriptive summary, not a test):
+  held-out success: PPO minus DQN over 20 seed pairs +0.058 +/- 0.033 (replication +0.064, Stage I +0.052)
+  learning speed: PPO minus DQN over 20 seed pairs -0.052 +/- 0.020 (replication -0.033, Stage I -0.070)
+
+Exploratory: other measures (no correction):
+  final train success: ppo 0.960 vs dqn 0.934  diff +0.026  p 0.0924  higher/tied/lower 7/2/1
+  held-out path_efficiency: ppo 0.664 vs dqn 0.610  diff +0.054  p 0.0194  higher/tied/lower 9/0/1
+  held-out steps: ppo 41.032 vs dqn 46.440  diff -5.408  p 0.0100  higher/tied/lower 1/0/9
+  held-out timeout: ppo 0.314 vs dqn 0.378  diff -0.064  p 0.0103  higher/tied/lower 1/0/9
+  held-out collisions: ppo 2.978 vs dqn 7.910  diff -4.932  p 0.0178  higher/tied/lower 2/0/8
+  held-out revisits: ppo 25.610 vs dqn 27.306  diff -1.696  p 0.4437  higher/tied/lower 5/0/5
+  train success at 500: ppo 0.558 vs dqn 0.706  diff -0.148  p 0.0065  higher/tied/lower 2/0/8
+  train success at 1000: ppo 0.796 vs dqn 0.798  diff -0.002  p 1.0000  higher/tied/lower 5/1/4
+  train success at 1500: ppo 0.828 vs dqn 0.840  diff -0.012  p 0.6555  higher/tied/lower 2/2/6
+  train success at 2000: ppo 0.880 vs dqn 0.924  diff -0.044  p 0.0623  higher/tied/lower 3/0/7
+  train success at 2500: ppo 0.926 vs dqn 0.944  diff -0.018  p 0.2997  higher/tied/lower 2/1/7
+  train success at 3000: ppo 0.960 vs dqn 0.934  diff +0.026  p 0.0924  higher/tied/lower 7/2/1
+
+Summary (mean +/- CI over seeds):
+  [unseen] dqn  success 0.622+/-0.042  path_efficiency 0.610+/-0.042  steps 46.440+/-3.649  timeout 0.378+/-0.042  collisions 7.910+/-3.852  revisits 27.306+/-4.491  total_reward -0.822+/-0.232
+  [unseen] ppo  success 0.686+/-0.022  path_efficiency 0.664+/-0.021  steps 41.032+/-1.892  timeout 0.314+/-0.022  collisions 2.978+/-2.123  revisits 25.610+/-1.724  total_reward -0.417+/-0.135
+  [train] dqn  success 0.934+/-0.020  path_efficiency 0.926+/-0.021  steps 20.512+/-1.675  timeout 0.066+/-0.020  collisions 0.740+/-1.674  revisits 5.560+/-2.362  total_reward 0.574+/-0.099
+  [train] ppo  success 0.960+/-0.022  path_efficiency 0.929+/-0.021  steps 18.828+/-1.882  timeout 0.040+/-0.022  collisions 0.716+/-0.896  revisits 2.910+/-1.527  total_reward 0.674+/-0.105
+  [unseen] dqn  per seed [0.68, 0.66, 0.68, 0.54, 0.58, 0.54, 0.64, 0.62, 0.7, 0.58]
+  [speed]  dqn  0.858+/-0.018  per seed [0.883, 0.837, 0.877, 0.873, 0.867, 0.827, 0.877, 0.817, 0.837, 0.883]
+  [unseen] ppo  per seed [0.7, 0.68, 0.7, 0.74, 0.68, 0.64, 0.72, 0.68, 0.68, 0.64]
+  [speed]  ppo  0.825+/-0.020  per seed [0.787, 0.84, 0.857, 0.863, 0.797, 0.83, 0.843, 0.813, 0.827, 0.79]
+
+Curve (mean greedy train success per eval point):
+  dqn  0:0.00  500:0.71  1000:0.80  1500:0.84  2000:0.92  2500:0.94  3000:0.93
+  ppo  0:0.00  500:0.56  1000:0.80  1500:0.83  2000:0.88  2500:0.93  3000:0.96
+
+Compute: env steps and wall-clock per run (config.json to final_eval.json):
+  dqn  mean env steps 113,837, minutes per run 5.5 (min 4.7, max 6.2)
+  ppo  mean env steps 85,563, minutes per run 3.6 (min 1.5, max 20.2)
+
+Secondary (pre-specified, exploratory): re-evaluation of the final networks
+(greedy re-checked against saved results; 5 passes, evaluation seed 20,000 + run seed)
+  dqn_eps0.05  0.700+/-0.030  per seed [0.712, 0.752, 0.752, 0.648, 0.664, 0.664, 0.716, 0.704, 0.744, 0.644]
+  ppo_eps0.05  0.767+/-0.018  per seed [0.776, 0.776, 0.752, 0.796, 0.744, 0.712, 0.792, 0.784, 0.768, 0.772]
+  ppo_sample   0.894+/-0.010  per seed [0.876, 0.892, 0.896, 0.912, 0.904, 0.868, 0.884, 0.904, 0.904, 0.904]
+  S1 PPO sampled vs DQN eps 0.05: ppo_sample 0.894 vs dqn_eps0.05 0.700  diff +0.194  p 0.0000  higher/tied/lower 10/0/0
+  S2 PPO eps 0.05 vs DQN eps 0.05: ppo_eps0.05 0.767 vs dqn_eps0.05 0.700  diff +0.067  p 0.0007  higher/tied/lower 9/1/0
+
+Long vs short held-out mazes (22 with the minimum path length 12, 28 longer):
+  short: ppo 0.886 vs dqn 0.850  diff +0.036  p 0.1827  higher/tied/lower 7/1/2
+  long: ppo 0.529 vs dqn 0.443  diff +0.086  p 0.0184  higher/tied/lower 7/3/0

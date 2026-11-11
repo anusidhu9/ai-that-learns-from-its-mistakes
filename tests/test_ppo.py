@@ -235,3 +235,37 @@ def test_ppo_protocol_settings_and_fresh_layouts():
     assert not (set(pool) | set(exp.unseen_layouts)) & used
     assert not set(exp.seeds) & set().union(*(e.seeds for e in others))
     assert json.loads(ppo.to_json())["agent"] == "ppo"
+
+
+def test_ppo_replication_matches_stage_i_with_fresh_seeds_and_mazes():
+    from src.evaluation import EXPERIMENTS
+    from src.training import build_env
+
+    rep, orig = EXPERIMENTS["ppo_replication"], EXPERIMENTS["ppo_generalization"]
+    assert rep.agents == orig.agents == ("dqn", "ppo")
+    assert rep.seeds == tuple(range(1100, 1110))
+    assert (rep.episodes, rep.decay_episodes, rep.eval_every) == \
+        (orig.episodes, orig.decay_episodes, orig.eval_every)
+    for agent in rep.agents:   # identical settings apart from seeds and mazes
+        a, b = rep.train_config(agent, 1100), orig.train_config(agent, 700)
+        assert (a.agent, a.agent_kwargs, a.env_preset, a.episodes, a.curriculum) == \
+            (b.agent, b.agent_kwargs, b.env_preset, b.episodes, b.curriculum)
+        assert {k: v for k, v in a.env_overrides.items() if k != "layout_pool"} == \
+            {k: v for k, v in b.env_overrides.items() if k != "layout_pool"}
+    pool = tuple(rep.env_overrides["layout_pool"])
+    assert pool == tuple(range(10100, 10150))
+    assert rep.unseen_layouts == tuple(s for s in range(10200, 10251) if s != 10218)
+    env = build_env(rep.train_config("dqn", 1100))
+
+    def keys(seeds):
+        out = []
+        for s in seeds:
+            env.reset(layout_seed=s)
+            out.append((env.grid.tobytes(), env.start, env.goal))
+        return out
+
+    train, held = keys(pool), keys(rep.unseen_layouts)
+    assert len(set(train)) == 50 and len(set(held)) == 50 and not set(train) & set(held)
+    assert keys([10218])[0] == keys([10149])[0]          # why 10218 was left out
+    others = [e for n, e in EXPERIMENTS.items() if n != "ppo_replication"]
+    assert not set(rep.seeds) & set().union(*(e.seeds for e in others))

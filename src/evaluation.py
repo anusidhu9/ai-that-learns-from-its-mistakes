@@ -338,6 +338,12 @@ PP_HELDOUT = tuple(range(9800, 9850))
 MR_SEEDS = tuple(range(800, 810))
 MR_POOL = tuple(range(9900, 9950))
 MR_HELDOUT = tuple(range(10001, 10051))
+# PPO replication (pre-registered in results/ppo_replication/PROTOCOL.md): Stage I's
+# two arms and settings with fresh seeds and layouts. Held-out 10218 is the same maze
+# as training layout 10149, so it is replaced by 10250.
+PR_SEEDS = tuple(range(1100, 1110))
+PR_POOL = tuple(range(10100, 10150))
+PR_HELDOUT = tuple(s for s in range(10200, 10251) if s != 10218)
 
 EXPERIMENTS: Dict[str, Experiment] = {
     "fixed_maze": Experiment(
@@ -453,6 +459,14 @@ EXPERIMENTS: Dict[str, Experiment] = {
                     "network and training with its memory reset at every step; local 5x5 "
                     "view, 50 fresh mazes (9900-9949), 50 held-out (10001-10050). "
                     "Seeds 800-809."),
+    "ppo_replication": Experiment(
+        "ppo_replication", "maze",
+        env_overrides={"layout_pool": list(PR_POOL), "obs_mode": "local"},
+        agents=("dqn", "ppo"), seeds=PR_SEEDS,
+        episodes=3000, decay_episodes=2000, eval_every=500, unseen_layouts=PR_HELDOUT,
+        description="Replication of ppo_generalization with fresh seeds and mazes: DQN and "
+                    "PPO with a local 5x5 view on 50 fresh mazes (10100-10149); test on 50 "
+                    "held-out mazes (10200-10250 except 10218). Seeds 1100-1109."),
     "generalization": Experiment(
         "generalization", "maze",
         env_overrides={"layout_pool": list(POOL), "obs_mode": "local"},

@@ -792,6 +792,11 @@ def make_report_figures(results_dir="results", out_dir="docs/figures", seed: int
     memory = load_experiment(results_dir / "memory_vs_replay")
     save(experiment_curves_figure(memory["curves"], "success"), "memory_replay_curves.png")
     save(experiment_bars_figure(memory["summary"], "success"), "memory_replay_success.png")
+    replication = load_experiment(results_dir / "ppo_replication")
+    save(experiment_curves_figure(replication["curves"], "success"),
+         "ppo_replication_curves.png")
+    save(experiment_bars_figure(replication["summary"], "success"),
+         "ppo_replication_success.png")
     import csv
     with open(results_dir / "stochastic_evaluation" / "results.csv", newline="") as f:
         save(stochastic_success_figure(list(csv.DictReader(f))), "stochastic_success.png")

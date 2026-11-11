@@ -1,0 +1,63 @@
+Experiment ppo_replication: Replication of ppo_generalization with fresh seeds and mazes: DQN and PPO with a local 5x5 view on 50 fresh mazes (10100-10149); test on 50 held-out mazes (10200-10250 except 10218). Seeds 1100-1109.
+  dqn             seed 1100  finished: train success 0.94
+  dqn             seed 1101  finished: train success 0.94
+  dqn             seed 1102  finished: train success 0.92
+  dqn             seed 1103  finished: train success 0.98
+  dqn             seed 1104  finished: train success 0.98
+  dqn             seed 1105  finished: train success 0.90
+  dqn             seed 1106  finished: train success 0.92
+  dqn             seed 1107  finished: train success 0.92
+  dqn             seed 1108  finished: train success 0.94
+  dqn             seed 1109  finished: train success 0.90
+  ppo             seed 1100  finished: train success 0.96
+  ppo             seed 1101  finished: train success 0.98
+  ppo             seed 1102  finished: train success 0.96
+  ppo             seed 1103  finished: train success 0.98
+  ppo             seed 1104  finished: train success 0.98
+  ppo             seed 1105  finished: train success 0.88
+  ppo             seed 1106  finished: train success 0.94
+  ppo             seed 1107  finished: train success 0.98
+  ppo             seed 1108  finished: train success 0.98
+  ppo             seed 1109  finished: train success 0.96
+
+Greedy evaluation, mean +/- 95% CI across seeds:
+agent           split    seeds             success     path_efficiency               steps            mistakes             hazards
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.93 +/- 0.02       0.93 +/- 0.02      20.51 +/- 1.67       6.37 +/- 1.94       0.00 +/- 0.00
+dqn             unseen      10       0.62 +/- 0.04       0.61 +/- 0.04      46.44 +/- 3.65      35.59 +/- 4.07       0.00 +/- 0.00
+ppo             train       10       0.96 +/- 0.02       0.93 +/- 0.02      18.83 +/- 1.88       3.67 +/- 2.05       0.00 +/- 0.00
+ppo             unseen      10       0.69 +/- 0.02       0.66 +/- 0.02      41.03 +/- 1.89      28.90 +/- 2.06       0.00 +/- 0.00
+
+Episode reward, steps to goal (successful episodes only) and mistake types:
+agent           split    seeds        total_reward       steps_to_goal         hazard_rate          collisions            revisits
+----------------------------------------------------------------------------------------------------------------------------------
+dqn             train       10       0.57 +/- 0.10      14.89 +/- 0.08       0.00 +/- 0.00       0.74 +/- 1.67       5.56 +/- 2.36
+dqn             unseen      10      -0.82 +/- 0.23      13.89 +/- 0.14       0.00 +/- 0.00       7.91 +/- 3.85      27.31 +/- 4.49
+ppo             train       10       0.67 +/- 0.10      15.45 +/- 0.11       0.00 +/- 0.00       0.72 +/- 0.90       2.91 +/- 1.53
+ppo             unseen      10      -0.42 +/- 0.14      14.04 +/- 0.09       0.00 +/- 0.00       2.98 +/- 2.12      25.61 +/- 1.72
+
+Success-rate differences (permutation test):
+  [train] ppo - dqn: +0.03  (p = 0.092)
+           Polly the Policy vs Neural Ned on success: difference +0.03, p = 0.092. The jury is still out; more seeds needed before anyone gloats.
+  [unseen] ppo - dqn: +0.06  (p = 0.010)
+           Polly the Policy beats Neural Ned on success (p = 0.010). Not a fluke.
+
+Learning speed: greedy success averaged over training checkpoints (permutation test):
+  ppo 0.825 vs dqn 0.858: difference -0.033  (p = 0.017)
+
+Other differences (permutation test):
+  [train] total_reward  ppo - dqn: +0.100  (p = 0.138)
+  [unseen] total_reward  ppo - dqn: +0.405  (p = 0.004)
+  [train] steps_to_goal ppo - dqn: +0.552  (p < 0.001)
+  [unseen] steps_to_goal ppo - dqn: +0.147  (p = 0.063)
+  [train] hazards       ppo - dqn: +0.000  (p = 1.000)
+  [unseen] hazards       ppo - dqn: +0.000  (p = 1.000)
+  [train] hazard_rate   ppo - dqn: +0.000  (p = 1.000)
+  [unseen] hazard_rate   ppo - dqn: +0.000  (p = 1.000)
+  [train] collisions    ppo - dqn: -0.024  (p = 1.000)
+  [unseen] collisions    ppo - dqn: -4.932  (p = 0.019)
+
+Replay buffer at the end of training (transitions; mean over seeds):
+  dqn             added    113837  main overwrote     93837
+
+Files written to runs\experiments_ppo_replication\ppo_replication

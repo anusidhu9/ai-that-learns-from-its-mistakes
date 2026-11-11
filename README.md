@@ -10,7 +10,7 @@
 
 Reinforcement-learning agents explore grid worlds, get **rewarded** for reaching the goal and **penalised** for mistakes (hitting walls, stepping on hazards, revisiting cells, running out of time), and are then tested to see whether they actually got better. Everything runs on a free CPU: Google Colab or a laptop.
 
-The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN) and eight variations of it (prioritized replay, an explicit memory of its mistakes, reward shaping, dueling heads, 3-step returns, a curriculum, a convolutional network, a recurrent network with memory) and PPO, in 17 studies with 5–10 seeds per agent, greedy evaluation, 95% confidence intervals and permutation tests. The last 11 studies were **pre-registered**: their hypotheses, seeds and mazes were written down before they ran. It includes an interactive **Gradio dashboard** where you can train agents, watch them, and play the mazes yourself, plus a mildly sarcastic commentator.
+The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQN) and eight variations of it (prioritized replay, an explicit memory of its mistakes, reward shaping, dueling heads, 3-step returns, a curriculum, a convolutional network, a recurrent network with memory) and PPO, in 18 studies with 5–10 seeds per agent, greedy evaluation, 95% confidence intervals and permutation tests. The last 12 studies were **pre-registered**: their hypotheses, seeds and mazes were written down before they ran. It includes an interactive **Gradio dashboard** where you can train agents, watch them, and play the mazes yourself, plus a mildly sarcastic commentator.
 
 ![Mistakes at each cell early vs late in training](docs/figures/mistake_heatmap.png)
 
@@ -23,7 +23,7 @@ The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQ
 3. **On mazes it has never seen, what matters is memory.** With a 5 × 5 view the agent can't tell where it has been and loops until time runs out. A DQN with a GRU memory solved 0.73 of new mazes against 0.29, and a follow-up showed the gain comes from the memory itself, not from how that network is trained.
 4. **Most training tricks sped up learning but did not help on new mazes.** Reward shaping and 3-step returns made DQN learn a maze much faster; neither they, nor a curriculum, a convolutional network or replaying mistakes, measurably improved success on mazes it had never seen.
 5. **Greedy evaluation understates every agent.** One random move in twenty raised every saved network's success on new mazes; the random moves break the loops.
-6. **PPO generalised slightly better than DQN** (0.69 vs 0.64) **but learned more slowly**, a small result that would need replicating.
+6. **PPO generalised slightly better than DQN but learned more slowly**, and both held in a pre-registered replication with fresh seeds and mazes: about 6 more new mazes in 100 (0.69 vs 0.62 there), mostly the long ones.
 
 ## Every study at a glance
 
@@ -39,6 +39,7 @@ The project compares a random baseline, tabular Q-learning, a Deep Q-Network (DQ
 | [`cnn_generalization`](#convolutional-q-network) ⓟ | Does a convolutional network help? | held-out 0.27 vs 0.33 | No evidence (p = 0.55) |
 | [`rnn_generalization`](#recurrent-q-network-memory) ⓟ | Does a memory help? | held-out 0.73 vs 0.29 | **Yes** (p = 0.0004, 10/10 seeds) |
 | [`ppo_generalization`](#ppo-a-policy-learner) ⓟ | PPO or DQN? | held-out 0.69 vs 0.64; slower to learn | **PPO slightly better** (p = 0.037), **slower** (p = 0.0003) |
+| [`ppo_replication`](#ppo-a-policy-learner) ⓟ | Does that hold with fresh seeds and mazes? | held-out 0.69 vs 0.62; slower start | **Replicated, both** (p = 0.021 each) |
 | [`stochastic_evaluation`](#greedy-vs-a-little-randomness) ⓟ | Does a little randomness in play change results? | plain DQN 0.42 → 0.55, all 30 networks up | **Yes** (p < 0.001) |
 | [`memory_vs_replay`](#memory-or-sequence-replay) ⓟ | Is it the memory or the training? | memory 0.88 vs memory reset 0.70 (= plain DQN) | **The memory** (p < 0.001, 10/10 seeds) |
 
@@ -196,6 +197,8 @@ Every agent above learns how good each move is. **PPO** (`ppo`) learns the polic
 
 PPO caught up on the training mazes by the end (0.93 vs 0.94), and its held-out advantage came entirely from the longer mazes (0.54 vs 0.43). The surprise was exploratory: when PPO **sampled** its moves instead of always taking the most likely one, it solved **0.90** of the held-out mazes, because a little randomness gets it out of the loops a 5×5 view leads it into. DQN was not tested that way, so that is not a head-to-head result. A PPO run took about 2 minutes against 7 for DQN. All 20 trained networks are in [`results/ppo_generalization/models/`](results/ppo_generalization/models) (3.3 MB).
 
+**Replicated.** A [pre-registered repeat](results/ppo_replication/ANALYSIS.md) ([protocol](results/ppo_replication/PROTOCOL.md)) with fresh seeds (1100–1109) and fresh mazes found the same: PPO solved 0.69 of new mazes against 0.62 for DQN (ahead in 9 of 10 seeds, p = 0.021 after correction), again mostly on the long ones (0.53 vs 0.44), and learned more slowly (0.825 vs 0.858, p = 0.021), though only at the start: it was level from episode 1,000 on. Over both studies PPO is ahead on new mazes by 0.058 ± 0.033. The 20 trained networks are in [`results/ppo_replication/models/`](results/ppo_replication/models) (3.3 MB).
+
 ![Success on training and held-out mazes, PPO study](docs/figures/ppo_success.png)
 
 ### Greedy vs a little randomness
@@ -343,7 +346,7 @@ src/
   visualization.py  every chart, episode replays, policy maps, report figures
   fun.py            commentary, nicknames, achievements, Hall of Shame
   app.py            Gradio dashboard
-tests/              330 tests (pytest); `-m "not slow"` skips one long training test
+tests/              331 tests (pytest); `-m "not slow"` skips one long training test
 .github/workflows/  GitHub Actions: runs the tests on every push and pull request
 results/            saved experiment results (summaries, per-run metrics, curves, logs)
 docs/figures/       figures used here and in the report

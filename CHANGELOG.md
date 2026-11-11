@@ -2,6 +2,16 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## PPO against DQN, replicated
+
+Stage I's held-out result (PPO 0.69 vs DQN 0.64, Holm-corrected p = 0.037) was small and only just significant, and the report said it needed replicating. This repeats Stage I exactly with fresh seeds and mazes.
+
+**Added**
+- Experiment `ppo_replication`, pre-registered in `results/ppo_replication/PROTOCOL.md` with its analysis script `analyze.py` written before the run: Stage I's two arms and settings, fresh seeds 1100–1109, training mazes 10100–10149 and held-out mazes 10200–10250 except 10218 (which generates training maze 10149). Before the run, Stage I's DQN and PPO seed 700 were re-run for 300 episodes and reproduced their saved logs exactly (`pre_checks.py`). Results, `analysis_output.txt`, `secondary.json`, `ANALYSIS.md`, all 20 trained networks in `models/` (3.3 MB, each checked to reproduce its saved results), two figures (`ppo_replication_curves.png`, `ppo_replication_success.png`), notebook cells, README rows and REPORT section 6.16 and finding 15.
+- 1 test (331 in total): the experiment's settings are Stage I's apart from seeds and mazes, its mazes are distinct and none repeats a training maze, and its seeds are new.
+
+**Result** (pre-registered, Holm-corrected): both Stage I results replicated. PPO solved more held-out mazes (0.69 vs 0.62, p = 0.021, ahead in 9 of 10 seeds), again mostly the longer ones, and learned its training mazes more slowly (0.825 vs 0.858, p = 0.021, behind in 8 of 10), though only at the start. Over both studies' 20 seed pairs PPO was ahead on new mazes by 0.058 ± 0.033. The run took 55 minutes without interruption; `run.log` was regenerated afterwards (outputs byte-identical).
+
 ## Final documentation pass (Stage J)
 
 After 17 studies the README's findings had grown into a 15-bullet list and parts of the report still described the project as it was several stages earlier. No code, experiment or result changed.
