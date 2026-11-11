@@ -652,7 +652,7 @@ Results were produced on a Windows 11 laptop CPU with Python 3.11.9, PyTorch 2.1
 - A recurrent PPO, combining a policy learner with Stage F's memory.
 - A curriculum over maze size, or one that advances on success rather than on a fixed schedule, tested against a control with the same number of episodes on each maze.
 - Reward shaping with more seeds or more held-out mazes, to detect a generalization effect as small as +0.06 if there is one, and a hint the local-view agent can observe.
-- Hosting the dashboard permanently (for example, on Hugging Face Spaces).
+- Hosting the dashboard permanently, so it can be used without running Colab or a local copy.
 
 ## References
 

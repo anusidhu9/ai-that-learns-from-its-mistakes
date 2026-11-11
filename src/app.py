@@ -45,8 +45,8 @@ def code_version() -> str:
     """Short git commit of the running code, shown in the header so anyone can
     tell whether a page runs the latest version (compare with GitHub).
 
-    Deployed copies without git history (the Hugging Face Space) read the
-    VERSION file that space/deploy.py writes."""
+    A copy without git history (for example a downloaded archive) can carry
+    a VERSION file with the same text instead."""
     import subprocess
     stamp = RESULTS_DIR.parent / "VERSION"
     if stamp.exists():

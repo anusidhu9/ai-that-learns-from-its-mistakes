@@ -2,6 +2,19 @@
 
 What each stage of MIND added or changed, with the reason behind each change.
 
+## Hugging Face Space removed
+
+The hosted demo on Hugging Face Spaces had been paused for weeks (the account's free CPU quota was set to zero), so the project no longer uses it. The dashboard still runs in Colab, with a temporary public link, or on any computer.
+
+**Removed**
+- The `space/` folder (`deploy.py` and the Space's own `app.py`, `README.md` and `requirements.txt`).
+- The README's Hugging Face badge, "Live demo" link and "paused" note; a "Try the dashboard" line points to Colab instead.
+- The "Host the dashboard on Hugging Face Spaces" section of `docs/PUBLISHING.md`, and Hugging Face mentions in its token advice; the redundant `hf_token` line in `.gitignore` (`*_token` covers it).
+
+**Changed**
+- `src/app.py`: the comment on the optional `VERSION` file no longer refers to the Space (the fallback itself is unchanged and still tested).
+- REPORT future work: "hosting the dashboard permanently" without naming a host.
+
 ## PPO against DQN, replicated
 
 Stage I's held-out result (PPO 0.69 vs DQN 0.64, Holm-corrected p = 0.037) was small and only just significant, and the report said it needed replicating. This repeats Stage I exactly with fresh seeds and mazes.

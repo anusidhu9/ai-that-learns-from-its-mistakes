@@ -7,11 +7,10 @@ checkpoints/
 .ipynb_checkpoints/
 
 # secrets: never commit tokens or keys
-hf_token
 *_token
 *token*.txt
 *.token
 .env
 
-# written by space/deploy.py into the Space only
+# optional version stamp for copies without git history (see src/app.py)
 VERSION

@@ -2,11 +2,8 @@
 
 [![Tests](https://github.com/anusidhu9/ai-that-learns-from-its-mistakes/actions/workflows/tests.yml/badge.svg)](https://github.com/anusidhu9/ai-that-learns-from-its-mistakes/actions/workflows/tests.yml)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/anusidhu9/ai-that-learns-from-its-mistakes/blob/main/MIND_Colab.ipynb)
-[![Open in Hugging Face Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/anusidhu/ai-that-learns-from-its-own-mistakes)
 
-**Live demo:** https://huggingface.co/spaces/anusidhu/ai-that-learns-from-its-own-mistakes
-
-> The hosted demo is currently **paused** while its Hugging Face hosting quota is sorted out. Until it is back, run the same dashboard yourself in one click with the **Open in Colab** badge (*Runtime → Run all*; the last cell prints a public link).
+**Try the dashboard:** click **Open in Colab**, then *Runtime → Run all*; the last cell prints a public link. Or run it on your own computer (see [Quick start](#quick-start)).
 
 Reinforcement-learning agents explore grid worlds, get **rewarded** for reaching the goal and **penalised** for mistakes (hitting walls, stepping on hazards, revisiting cells, running out of time), and are then tested to see whether they actually got better. Everything runs on a free CPU: Google Colab or a laptop.
 
@@ -353,7 +350,7 @@ docs/figures/       figures used here and in the report
 MIND_Colab.ipynb    end-to-end notebook
 REPORT.md           final report
 REPORT_TEMPLATE.md  template for writing up new experiments
-docs/PUBLISHING.md  how to publish on GitHub, Colab and Hugging Face Spaces
+docs/PUBLISHING.md  how to publish on GitHub and open it in Colab
 CHANGELOG.md        what changed at each stage, and why
 LICENSE             MIT License
 ```
